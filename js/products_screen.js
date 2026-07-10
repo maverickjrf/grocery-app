@@ -1,6 +1,7 @@
 import { render, escape, icons } from './ui.js';
 import { productRepository } from './products.js';
 import { UNIT_OPTIONS, perBaseLabel } from './units.js';
+import { scanBarcode } from './scanner.js';
 
 const BOX_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -22,12 +23,14 @@ async function renderList(onExit) {
       <header class="app-bar">
         <button class="icon-btn" id="back" aria-label="Back">${icons.back}</button>
         <h1 class="app-bar-title">Products</h1>
+        <button class="icon-btn app-bar-action" id="scan" aria-label="Scan barcode">${icons.scan}</button>
       </header>
       <div class="app-content"><div class="loading">Loading…</div></div>
       <button class="fab" id="add" aria-label="Add product">${icons.plus}</button>
     </div>`);
   document.getElementById('back').onclick = onExit;
   document.getElementById('add').onclick = () => openForm(onExit, null);
+  document.getElementById('scan').onclick = () => scanAndRoute(onExit);
 
   const content = document.querySelector('.app-content');
   let products;
@@ -42,7 +45,7 @@ async function renderList(onExit) {
       <div class="empty-state">
         <div class="empty-icon">${BOX_ICON}</div>
         <p>No products yet.</p>
-        <p class="subtitle">Add items you buy — like Coca-Cola 1.5L or Rice 5kg.</p>
+        <p class="subtitle">Add items you buy — or tap the scan icon to add one by barcode.</p>
       </div>`;
     return;
   }
@@ -63,8 +66,20 @@ async function renderList(onExit) {
   });
 }
 
-function openForm(onExit, product) {
+// Scan a barcode, then either open the matching product or start a new one
+async function scanAndRoute(onExit) {
+  const code = await scanBarcode();
+  if (!code) return; // cancelled
+  let existing = null;
+  try { existing = await productRepository.findByBarcode(code); }
+  catch (err) { alert(err.message || 'Barcode lookup failed.'); return; }
+  if (existing) openForm(onExit, existing);
+  else openForm(onExit, null, { barcode: code, scannedNew: true });
+}
+
+function openForm(onExit, product, prefill = {}) {
   const isEdit = !!product;
+  const barcodeValue = isEdit ? (product.barcode || '') : (prefill.barcode || '');
   const unitOptions = UNIT_OPTIONS.map(u =>
     `<option value="${u}" ${isEdit && product.package_unit === u ? 'selected' : ''}>${u}</option>`).join('');
 
@@ -73,6 +88,8 @@ function openForm(onExit, product) {
   overlay.innerHTML = `
     <div class="modal modal-scroll">
       <h2>${isEdit ? 'Edit product' : 'Add product'}</h2>
+      ${prefill.scannedNew
+        ? `<p class="hint scan-new-hint">New barcode — not in your products yet. Add its details below.</p>` : ''}
       <label class="field"><span>Product name</span>
         <input id="p-name" type="text" value="${isEdit ? escape(product.name) : ''}" placeholder="e.g. Coca-Cola" /></label>
       <label class="field"><span>Brand (optional)</span>
@@ -88,7 +105,10 @@ function openForm(onExit, product) {
       </div>
       <p class="hint" id="p-hint"></p>
       <label class="field"><span>Barcode (optional)</span>
-        <input id="p-barcode" type="text" value="${isEdit && product.barcode ? escape(product.barcode) : ''}" placeholder="Scanning comes next — or type it" /></label>
+        <div class="scan-row">
+          <input id="p-barcode" type="text" value="${escape(barcodeValue)}" placeholder="Scan or type" />
+          <button type="button" class="btn-scan" id="p-scan" aria-label="Scan barcode">${icons.scan}</button>
+        </div></label>
       <p id="m-error" class="error" hidden></p>
       <div class="modal-actions">
         <button class="btn-secondary" id="cancel">Cancel</button>
@@ -106,8 +126,13 @@ function openForm(onExit, product) {
   const updateHint = () => { hint.textContent = `Price will be tracked ${perBaseLabel(unitSel.value)}.`; };
   unitSel.onchange = updateHint; updateHint();
 
+  overlay.querySelector('#p-scan').onclick = async () => {
+    const code = await scanBarcode();
+    if (code) overlay.querySelector('#p-barcode').value = code;
+  };
+
   const nameInput = overlay.querySelector('#p-name');
-  nameInput.focus();
+  if (!isEdit && barcodeValue) nameInput.focus(); else nameInput.focus();
   const errorEl = overlay.querySelector('#m-error');
   const saveBtn = overlay.querySelector('#save');
   const fail = (m) => { errorEl.textContent = m; errorEl.hidden = false; };

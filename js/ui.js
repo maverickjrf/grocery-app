@@ -16,4 +16,7 @@ export const icons = {
   archive: svg(`<polyline points="21 8 21 21 3 21 3 8"></polyline>
     <rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line>`),
   plus: svg(`<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>`),
+  scan: svg(`<path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+    <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+    <line x1="7" y1="12" x2="17" y2="12"></line>`),
 };

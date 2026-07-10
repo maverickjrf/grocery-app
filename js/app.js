@@ -2,6 +2,7 @@ import { render, escape, icons } from './ui.js';
 import { authRepository } from './auth.js';
 import { householdRepository } from './household.js';
 import { showStoresScreen } from './stores_screen.js';
+import { showProductsScreen } from './products_screen.js';
 
 // ---------- LOGIN / SIGNUP ----------
 function showAuthScreen(mode = 'signin') {
@@ -128,7 +129,8 @@ function showHome(household) {
           <button id="copy" class="btn-copy">Copy</button>
         </div>
       </label>
-      <button id="stores" class="btn-primary" style="margin-top:20px">Manage stores</button>
+      <button id="products" class="btn-primary" style="margin-top:20px">Manage products</button>
+      <button id="stores" class="btn-primary">Manage stores</button>
       <button id="logout" class="btn-secondary">Log out</button>
     </div></div>`);
 
@@ -140,6 +142,7 @@ function showHome(household) {
       setTimeout(() => { b.textContent = 'Copy'; }, 1500);
     } catch { /* code is visible to copy manually */ }
   };
+  document.getElementById('products').onclick = () => showProductsScreen(() => showHome(household));
   document.getElementById('stores').onclick = () => showStoresScreen(() => showHome(household));
   document.getElementById('logout').onclick = async () => {
     await authRepository.signOut(); showAuthScreen('signin');

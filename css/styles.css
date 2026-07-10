@@ -1,0 +1,60 @@
+:root {
+  --primary: #1d9e75;
+  --primary-dark: #157a5a;
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --text: #1a1c1b;
+  --text-muted: #5f635f;
+  --border: #d9ddda;
+  --error: #ba1a1a;
+  --error-bg: #ffdad6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111413; --surface: #1c1f1e; --text: #e2e3e0;
+    --text-muted: #a8aca9; --border: #353a38;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh;
+}
+.screen-center {
+  min-height: 100vh; display: flex; align-items: center;
+  justify-content: center; padding: 24px;
+}
+.loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+.card {
+  background: var(--surface); border-radius: 20px; padding: 32px 24px;
+  max-width: 400px; width: 100%; box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+}
+.brand { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 8px; }
+.brand-badge {
+  width: 56px; height: 56px; border-radius: 50%; background: var(--primary);
+  display: flex; align-items: center; justify-content: center;
+}
+h1 { font-size: 22px; font-weight: 600; text-align: center; }
+.subtitle { color: var(--text-muted); text-align: center; margin: 4px 0 24px; font-size: 15px; }
+.field { display: block; margin-bottom: 16px; }
+.field span { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-muted); }
+.field input {
+  width: 100%; padding: 13px 14px; font-size: 16px; border-radius: 12px;
+  border: 1.5px solid var(--border); background: var(--surface); color: var(--text);
+}
+.field input:focus { outline: none; border-color: var(--primary); }
+.btn-primary, .btn-secondary {
+  width: 100%; padding: 14px; font-size: 16px; font-weight: 600;
+  border-radius: 12px; border: none; cursor: pointer; margin-top: 8px;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-primary:disabled { opacity: 0.6; cursor: default; }
+.btn-secondary { background: transparent; color: var(--primary); border: 1.5px solid var(--border); }
+.error {
+  background: var(--error-bg); color: var(--error); padding: 10px 14px;
+  border-radius: 10px; font-size: 14px; margin-bottom: 8px;
+}
+.switch { text-align: center; margin-top: 18px; font-size: 14px; color: var(--text-muted); }
+.switch a { color: var(--primary); text-decoration: none; font-weight: 600; }

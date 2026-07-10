@@ -256,3 +256,20 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
 
 .scan-loop { display: flex; gap: 10px; margin-top: 14px; }
 .scan-loop .btn-primary, .scan-loop .btn-secondary { margin-top: 0; }
+
+.dialog-actions { display: flex; flex-direction: column; gap: 8px; }
+.dialog-actions button { margin-top: 0; }
+.btn-danger {
+  width: 100%; padding: 14px; font-size: 16px; font-weight: 600;
+  border-radius: 12px; border: none; cursor: pointer; background: var(--error); color: #fff;
+}
+.btn-danger:hover { filter: brightness(0.95); }
+
+.history-item { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 8px; }
+.history-row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.history-actions { display: flex; gap: 18px; justify-content: flex-end; }
+.link-btn {
+  background: none; border: none; padding: 2px 0; font-size: 14px; font-weight: 600;
+  color: var(--primary); cursor: pointer;
+}
+.link-danger { color: var(--error); }

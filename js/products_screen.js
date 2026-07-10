@@ -3,13 +3,14 @@ import { productRepository } from './products.js';
 import { scanBarcode } from './scanner.js';
 import { showProductDetail } from './product_detail.js';
 import { openProductForm } from './product_form.js';
+import { confirmDialog } from './dialog.js';
 
 const BOX_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
   <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>`;
 
-export function showProductsScreen(onExit) { renderList(onExit); }
+export function showProductsScreen(onExit) { renderList(onExit, false); }
 
 function formatSize(p) {
   const q = Number(p.package_quantity), u = p.package_unit;
@@ -17,7 +18,7 @@ function formatSize(p) {
   return `${q} ${u}${q === 1 ? '' : 's'}`;
 }
 
-async function renderList(onExit) {
+async function renderList(onExit, includeArchived) {
   render(`
     <div class="app-screen">
       <header class="app-bar">
@@ -28,38 +29,49 @@ async function renderList(onExit) {
       <div class="app-content"><div class="loading">Loading…</div></div>
       <button class="fab" id="add" aria-label="Add product">${icons.plus}</button>
     </div>`);
+  const reload = () => renderList(onExit, includeArchived);
   document.getElementById('back').onclick = onExit;
-  document.getElementById('add').onclick = () => openProductForm({ onSaved: () => renderList(onExit) });
-  document.getElementById('scan').onclick = () => scanAndRoute(onExit);
+  document.getElementById('add').onclick = () => openProductForm({ onSaved: reload });
+  document.getElementById('scan').onclick = () => scanAndRoute(reload);
 
   const content = document.querySelector('.app-content');
   let products;
-  try { products = await productRepository.getProducts(); }
+  try { products = await productRepository.getProducts({ includeArchived }); }
   catch (err) {
     content.innerHTML = `<p class="error">${escape(err.message || 'Could not load products.')}</p>`;
     return;
   }
 
+  const toggle = `<label class="show-archived">
+    <input type="checkbox" id="showArchived" ${includeArchived ? 'checked' : ''} />
+    Show archived products</label>`;
+
   if (!products.length) {
-    content.innerHTML = `
+    content.innerHTML = toggle + `
       <div class="empty-state">
         <div class="empty-icon">${BOX_ICON}</div>
-        <p>No products yet.</p>
+        <p>${includeArchived ? 'No products found.' : 'No products yet.'}</p>
         <p class="subtitle">Add items you buy — or tap the scan icon to add one by barcode.</p>
       </div>`;
+    document.getElementById('showArchived').onchange = (e) => renderList(onExit, e.target.checked);
     return;
   }
 
-  content.innerHTML = `<ul class="list">${products.map(p => `
-    <li class="list-item">
+  content.innerHTML = toggle + `<ul class="list">${products.map(p => `
+    <li class="list-item ${p.archived ? 'is-archived' : ''}">
       <button class="list-item-main list-item-open" data-open="${p.id}">
-        <div class="list-item-title">${escape(p.name)} ${escape(formatSize(p))}</div>
+        <div class="list-item-title">${escape(p.name)} ${escape(formatSize(p))}${p.archived ? ' <span class="tag">Archived</span>' : ''}</div>
         <div class="list-item-sub">${[p.brand, p.category].filter(Boolean).map(escape).join(' · ') || 'No brand'}</div>
       </button>
       <div class="list-item-actions">
-        <button class="icon-btn" data-edit="${p.id}" aria-label="Edit">${icons.edit}</button>
+        ${p.archived
+          ? `<button class="link-btn" data-restore="${p.id}">Restore</button>`
+          : `<button class="icon-btn" data-edit="${p.id}" aria-label="Edit">${icons.edit}</button>
+             <button class="icon-btn" data-del="${p.id}" aria-label="Delete">${icons.trash}</button>`}
       </div>
     </li>`).join('')}</ul>`;
+
+  document.getElementById('showArchived').onchange = (e) => renderList(onExit, e.target.checked);
 
   content.querySelectorAll('[data-open]').forEach(btn => {
     btn.onclick = () => showProductDetail(
@@ -67,19 +79,57 @@ async function renderList(onExit) {
       () => showProductsScreen(onExit));
   });
   content.querySelectorAll('[data-edit]').forEach(btn => {
-    btn.onclick = () => openProductForm({
-      product: products.find(p => p.id === btn.dataset.edit),
-      onSaved: () => renderList(onExit),
-    });
+    btn.onclick = () => openProductForm({ product: products.find(p => p.id === btn.dataset.edit), onSaved: reload });
+  });
+  content.querySelectorAll('[data-del]').forEach(btn => {
+    btn.onclick = () => confirmDeleteProduct(products.find(p => p.id === btn.dataset.del), reload);
+  });
+  content.querySelectorAll('[data-restore]').forEach(btn => {
+    btn.onclick = async () => {
+      try { await productRepository.setArchived(btn.dataset.restore, false); reload(); }
+      catch (err) { alert(err.message || 'Could not restore the product.'); }
+    };
   });
 }
 
-async function scanAndRoute(onExit) {
+async function confirmDeleteProduct(product, reload) {
+  let count = 0;
+  try { count = await productRepository.countAllObservations(product.id); }
+  catch (err) { alert(err.message || 'Could not check the product.'); return; }
+
+  if (count === 0) {
+    const c = await confirmDialog({
+      title: 'Delete this product?',
+      message: 'It has no recorded prices, so nothing will be lost.',
+      actions: [
+        { label: 'Delete forever', style: 'danger', value: 'delete' },
+        { label: 'Cancel', style: 'text', value: null },
+      ],
+    });
+    if (c !== 'delete') return;
+    try { await productRepository.deleteProduct(product.id); reload(); }
+    catch (err) { alert(err.message || 'Could not delete the product.'); }
+  } else {
+    const c = await confirmDialog({
+      title: 'Archive this product?',
+      message: `It has ${count} recorded price${count === 1 ? '' : 's'}. Archiving hides it but keeps its price history.`,
+      actions: [
+        { label: 'Archive', style: 'primary', value: 'archive' },
+        { label: 'Cancel', style: 'text', value: null },
+      ],
+    });
+    if (c !== 'archive') return;
+    try { await productRepository.setArchived(product.id, true); reload(); }
+    catch (err) { alert(err.message || 'Could not archive the product.'); }
+  }
+}
+
+async function scanAndRoute(reload) {
   const code = await scanBarcode();
   if (!code) return;
   let existing = null;
   try { existing = await productRepository.findByBarcode(code); }
   catch (err) { alert(err.message || 'Barcode lookup failed.'); return; }
-  if (existing) openProductForm({ product: existing, onSaved: () => renderList(onExit) });
-  else openProductForm({ prefill: { barcode: code, scannedNew: true }, onSaved: () => renderList(onExit) });
+  if (existing) openProductForm({ product: existing, onSaved: reload });
+  else openProductForm({ prefill: { barcode: code, scannedNew: true }, onSaved: reload });
 }

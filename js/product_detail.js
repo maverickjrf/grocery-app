@@ -4,6 +4,7 @@ import { observationRepository } from './observations.js';
 import { unitPrice, baseUnitFor } from './units.js';
 import { computeStoreSummary, relativeDays } from './insights.js';
 import { session } from './session.js';
+import { confirmDialog } from './dialog.js';
 
 const peso = (n) => '₱' + Number(n).toLocaleString('en-PH',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -71,20 +72,26 @@ async function loadBody(product) {
     <h2 class="section-title" style="margin-top:24px">All prices</h2>
     <ul class="history-list">${history.map(r => `
       <li class="history-item">
-        <div class="history-main">
-          <div class="history-price">${peso(r.observed_price)}</div>
-          <div class="history-unit">${peso(r.calculated_unit_price)} / ${escape(r.base_unit)}</div>
+        <div class="history-row">
+          <div class="history-main">
+            <div class="history-price">${peso(r.observed_price)}</div>
+            <div class="history-unit">${peso(r.calculated_unit_price)} / ${escape(r.base_unit)}</div>
+          </div>
+          <div class="history-meta">
+            <div class="history-store">${escape(r.store?.name || 'Unknown store')}</div>
+            <div class="history-sub">${formatDate(r.observation_date)} · ${escape(r.observer?.username || 'someone')}</div>
+            ${r.notes ? `<div class="history-notes">${escape(r.notes)}</div>` : ''}
+          </div>
         </div>
-        <div class="history-meta">
-          <div class="history-store">${escape(r.store?.name || 'Unknown store')}</div>
-          <div class="history-sub">${formatDate(r.observation_date)} · ${escape(r.observer?.username || 'someone')}</div>
-          ${r.notes ? `<div class="history-notes">${escape(r.notes)}</div>` : ''}
+        <div class="history-actions">
+          <button class="link-btn" data-edit="${r.id}">Edit</button>
+          <button class="link-btn link-danger" data-del="${r.id}">Delete</button>
         </div>
       </li>`).join('')}</ul>`;
 
+  // Where-to-buy comparison
   const summary = computeStoreSummary(history);
   const cheapestId = summary.cheapest ? summary.cheapest.storeId : null;
-
   const renderStores = () => {
     const list = [...summary.stores];
     if (storeSort === 'cheapest') list.sort((a, b) => a.latestPrice - b.latestPrice);
@@ -103,14 +110,50 @@ async function loadBody(product) {
     el.querySelectorAll('.chip').forEach(c =>
       c.classList.toggle('chip-active', c.dataset.sort === storeSort));
   };
-
   el.querySelectorAll('.chip').forEach(c => {
     c.onclick = () => { storeSort = c.dataset.sort; renderStores(); };
   });
   renderStores();
+
+  // Edit / delete on each price
+  el.querySelectorAll('[data-edit]').forEach(b => {
+    b.onclick = () => openPriceForm(product, {
+      observation: history.find(h => h.id === b.dataset.edit),
+      onSaved: () => loadBody(product),
+    });
+  });
+  el.querySelectorAll('[data-del]').forEach(b => {
+    b.onclick = () => confirmDeletePrice(product, history.find(h => h.id === b.dataset.del));
+  });
 }
 
-export async function openPriceForm(product, { defaultStoreId = null, onSaved = null } = {}) {
+async function confirmDeletePrice(product, o) {
+  const choice = await confirmDialog({
+    title: 'Delete this price?',
+    message: `${peso(o.observed_price)} at ${o.store?.name || 'a store'} on ${formatDate(o.observation_date)}.`,
+    actions: [
+      { label: 'Hide — recoverable later', style: 'secondary', value: 'soft' },
+      { label: 'Delete forever', style: 'danger', value: 'hard' },
+      { label: 'Cancel', style: 'text', value: null },
+    ],
+  });
+  if (!choice) return;
+  try {
+    if (choice === 'soft') await observationRepository.softDeleteObservation(o.id);
+    else await observationRepository.hardDeleteObservation(o.id);
+    loadBody(product);
+  } catch (err) {
+    alert(err.message || 'Could not delete the price.');
+  }
+}
+
+// Shared add/edit price form. Pass `observation` to edit an existing entry.
+export async function openPriceForm(product, { defaultStoreId = null, observation = null, onSaved = null } = {}) {
+  const isEdit = !!observation;
+  const pkgQty = isEdit ? Number(observation.package_quantity) : Number(product.package_quantity);
+  const pkgUnit = isEdit ? observation.package_unit : product.package_unit;
+  const base = baseUnitFor(pkgUnit);
+
   let stores = [];
   try { stores = await storeRepository.getStores(); } catch { /* handled below */ }
 
@@ -129,27 +172,29 @@ export async function openPriceForm(product, { defaultStoreId = null, onSaved = 
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const base = baseUnitFor(product.package_unit);
+  const selectedStore = isEdit ? observation.store_id : defaultStoreId;
 
   overlay.innerHTML = `<div class="modal modal-scroll">
-    <h2>Record price</h2>
+    <h2>${isEdit ? 'Edit price' : 'Record price'}</h2>
     <p class="subtitle" style="margin-bottom:16px">${escape(product.name)} ${escape(sizeLabel(product))}</p>
     <label class="field"><span>Store</span>
       <select id="o-store">${stores.map(s =>
-        `<option value="${s.id}" ${s.id === defaultStoreId ? 'selected' : ''}>${escape(s.name)}${s.location ? ' — ' + escape(s.location) : ''}</option>`).join('')}</select></label>
+        `<option value="${s.id}" ${s.id === selectedStore ? 'selected' : ''}>${escape(s.name)}${s.location ? ' — ' + escape(s.location) : ''}</option>`).join('')}</select></label>
     <label class="field"><span>Price (₱)</span>
-      <input id="o-price" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 90" /></label>
+      <input id="o-price" type="number" inputmode="decimal" min="0" step="any"
+        value="${isEdit ? escape(String(observation.observed_price)) : ''}" placeholder="e.g. 90" /></label>
     <p class="hint" id="o-unit">Unit price will show here as you type.</p>
     <label class="field"><span>Date</span>
-      <input id="o-date" type="date" value="${today}" max="${today}" /></label>
+      <input id="o-date" type="date" value="${isEdit ? escape(observation.observation_date) : today}" max="${today}" /></label>
     <label class="field"><span>Quantity bought (optional)</span>
-      <input id="o-qty" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 2" /></label>
+      <input id="o-qty" type="number" inputmode="decimal" min="0" step="any"
+        value="${isEdit && observation.quantity_purchased != null ? escape(String(observation.quantity_purchased)) : ''}" placeholder="e.g. 2" /></label>
     <label class="field"><span>Notes (optional)</span>
-      <input id="o-notes" type="text" placeholder="e.g. on sale, or which branch" /></label>
+      <input id="o-notes" type="text" value="${isEdit && observation.notes ? escape(observation.notes) : ''}" placeholder="e.g. on sale, or which branch" /></label>
     <p id="o-error" class="error" hidden></p>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancel">Cancel</button>
-      <button class="btn-primary" id="save">Save price</button>
+      <button class="btn-primary" id="save">${isEdit ? 'Save changes' : 'Save price'}</button>
     </div></div>`;
   document.body.appendChild(overlay);
 
@@ -162,7 +207,7 @@ export async function openPriceForm(product, { defaultStoreId = null, onSaved = 
   const updateUnit = () => {
     const v = parseFloat(priceInput.value);
     if (v > 0) {
-      unitHint.textContent = `= ${peso(unitPrice(v, Number(product.package_quantity), product.package_unit))} per ${base}`;
+      unitHint.textContent = `= ${peso(unitPrice(v, pkgQty, pkgUnit))} per ${base}`;
       unitHint.classList.add('hint-strong');
     } else {
       unitHint.textContent = 'Unit price will show here as you type.';
@@ -170,6 +215,7 @@ export async function openPriceForm(product, { defaultStoreId = null, onSaved = 
     }
   };
   priceInput.oninput = updateUnit;
+  updateUnit();
   priceInput.focus();
 
   const errorEl = overlay.querySelector('#o-error');
@@ -185,22 +231,23 @@ export async function openPriceForm(product, { defaultStoreId = null, onSaved = 
     if (!date) return fail('Please choose a date.');
 
     saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+    const common = {
+      storeId: overlay.querySelector('#o-store').value,
+      observedPrice: price,
+      quantityPurchased: qtyRaw ? parseFloat(qtyRaw) : null,
+      observationDate: date,
+      notes: overlay.querySelector('#o-notes').value,
+      packageQuantity: pkgQty,
+      packageUnit: pkgUnit,
+    };
     try {
-      await observationRepository.recordObservation({
-        productId: product.id,
-        storeId: overlay.querySelector('#o-store').value,
-        observedPrice: price,
-        quantityPurchased: qtyRaw ? parseFloat(qtyRaw) : null,
-        observationDate: date,
-        notes: overlay.querySelector('#o-notes').value,
-        packageQuantity: Number(product.package_quantity),
-        packageUnit: product.package_unit,
-      });
+      if (isEdit) await observationRepository.updateObservation(observation.id, common);
+      else await observationRepository.recordObservation({ ...common, productId: product.id });
       close();
       if (onSaved) onSaved();
     } catch (err) {
       fail(err.message || 'Could not save the price.');
-      saveBtn.disabled = false; saveBtn.textContent = 'Save price';
+      saveBtn.disabled = false; saveBtn.textContent = isEdit ? 'Save changes' : 'Save price';
     }
   };
 }

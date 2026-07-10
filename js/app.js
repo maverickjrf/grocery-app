@@ -3,6 +3,9 @@ import { authRepository } from './auth.js';
 import { householdRepository } from './household.js';
 import { showStoresScreen } from './stores_screen.js';
 import { showProductsScreen } from './products_screen.js';
+import { storeRepository } from './stores.js';
+import { session } from './session.js';
+import { startShoppingScan } from './shopping.js';
 
 // ---------- LOGIN / SIGNUP ----------
 function showAuthScreen(mode = 'signin') {
@@ -122,16 +125,28 @@ function showHome(household) {
     <div class="screen-center"><div class="card">
       <div class="brand"><div class="brand-badge">${icons.cart}</div>
         <h1>${escape(household.name)}</h1></div>
-      <p class="subtitle">You're the ${escape(household.role)} of this household.</p>
-      <label class="field"><span>Invite code — share this to add family members</span>
-        <div class="invite-row">
-          <input id="invite" type="text" readonly value="${escape(household.inviteCode)}" />
-          <button id="copy" class="btn-copy">Copy</button>
-        </div>
-      </label>
-      <button id="products" class="btn-primary" style="margin-top:20px">Manage products</button>
-      <button id="stores" class="btn-primary">Manage stores</button>
-      <button id="logout" class="btn-secondary">Log out</button>
+
+      <div class="shopping-bar">
+        <label class="shopping-store">
+          <span>Shopping at</span>
+          <select id="current-store"><option value="">Loading stores…</option></select>
+        </label>
+        <button id="scan-shop" class="btn-primary">Scan a product</button>
+      </div>
+
+      <button id="products" class="btn-secondary">Manage products</button>
+      <button id="stores" class="btn-secondary">Manage stores</button>
+
+      <details class="home-more">
+        <summary>Household &amp; account</summary>
+        <label class="field" style="margin-top:12px"><span>Invite code — share to add family members</span>
+          <div class="invite-row">
+            <input id="invite" type="text" readonly value="${escape(household.inviteCode)}" />
+            <button id="copy" class="btn-copy">Copy</button>
+          </div>
+        </label>
+        <button id="logout" class="btn-secondary">Log out</button>
+      </details>
     </div></div>`);
 
   document.getElementById('copy').onclick = async () => {
@@ -147,6 +162,26 @@ function showHome(household) {
   document.getElementById('logout').onclick = async () => {
     await authRepository.signOut(); showAuthScreen('signin');
   };
+  document.getElementById('scan-shop').onclick = () => startShoppingScan(() => showHome(household));
+
+  // Fill the "Shopping at" selector and remember the choice
+  (async () => {
+    const sel = document.getElementById('current-store');
+    let stores = [];
+    try { stores = await storeRepository.getStores(); } catch { /* ignore */ }
+    if (!stores.length) {
+      sel.innerHTML = `<option value="">No stores yet — add one first</option>`;
+      return;
+    }
+    const saved = session.getCurrentStoreId();
+    sel.innerHTML = stores.map(s =>
+      `<option value="${s.id}" ${s.id === saved ? 'selected' : ''}>${escape(s.name)}${s.location ? ' — ' + escape(s.location) : ''}</option>`).join('');
+    if (!saved || !stores.some(s => s.id === saved)) {
+      sel.value = stores[0].id;
+      session.setCurrentStoreId(stores[0].id);
+    }
+    sel.onchange = () => session.setCurrentStoreId(sel.value);
+  })();
 }
 
 // ---------- START ----------

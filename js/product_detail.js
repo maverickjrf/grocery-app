@@ -2,6 +2,8 @@ import { render, escape, icons } from './ui.js';
 import { storeRepository } from './stores.js';
 import { observationRepository } from './observations.js';
 import { unitPrice, baseUnitFor } from './units.js';
+import { computeStoreSummary, relativeDays } from './insights.js';
+import { session } from './session.js';
 
 const peso = (n) => '₱' + Number(n).toLocaleString('en-PH',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -10,7 +12,6 @@ function sizeLabel(p) {
   const q = Number(p.package_quantity), u = p.package_unit;
   return ['ml', 'L', 'g', 'kg'].includes(u) ? `${q}${u}` : `${q} ${u}${q === 1 ? '' : 's'}`;
 }
-
 function formatDate(d) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-PH',
     { year: 'numeric', month: 'short', day: 'numeric' });
@@ -29,48 +30,87 @@ export function showProductDetail(product, onBack) {
           <div class="detail-sub">${[product.brand, product.category].filter(Boolean).map(escape).join(' · ') || 'No brand'}</div>
           ${product.barcode ? `<div class="detail-meta">Barcode: ${escape(product.barcode)}</div>` : ''}
         </div>
-        <h2 class="section-title">Price history</h2>
-        <div id="history"><div class="loading">Loading…</div></div>
+        <div id="detail-body"><div class="loading">Loading…</div></div>
       </div>
       <button class="fab" id="record" aria-label="Record price">${icons.plus}</button>
     </div>`);
   document.getElementById('back').onclick = onBack;
-  document.getElementById('record').onclick = () => openPriceForm(product);
-
-  renderHistory(product);
+  document.getElementById('record').onclick = () => openPriceForm(product, {
+    defaultStoreId: session.getCurrentStoreId(),
+    onSaved: () => loadBody(product),
+  });
+  loadBody(product);
 }
 
-async function renderHistory(product) {
-  const el = document.getElementById('history');
-  let rows;
-  try { rows = await observationRepository.getHistoryForProduct(product.id); }
+let storeSort = 'cheapest'; // or 'recent'
+
+async function loadBody(product) {
+  const el = document.getElementById('detail-body');
+  if (!el) return;
+  let history;
+  try { history = await observationRepository.getHistoryForProduct(product.id); }
   catch (err) {
     el.innerHTML = `<p class="error">${escape(err.message || 'Could not load history.')}</p>`;
     return;
   }
 
-  if (!rows.length) {
+  if (!history.length) {
     el.innerHTML = `<div class="empty-state">
       <p>No prices recorded yet.</p>
       <p class="subtitle">Tap the + button to record the first price.</p></div>`;
     return;
   }
 
-  el.innerHTML = `<ul class="history-list">${rows.map(r => `
-    <li class="history-item">
-      <div class="history-main">
-        <div class="history-price">${peso(r.observed_price)}</div>
-        <div class="history-unit">${peso(r.calculated_unit_price)} / ${escape(r.base_unit)}</div>
-      </div>
-      <div class="history-meta">
-        <div class="history-store">${escape(r.store?.name || 'Unknown store')}</div>
-        <div class="history-sub">${formatDate(r.observation_date)} · ${escape(r.observer?.username || 'someone')}</div>
-        ${r.notes ? `<div class="history-notes">${escape(r.notes)}</div>` : ''}
-      </div>
-    </li>`).join('')}</ul>`;
+  el.innerHTML = `
+    <h2 class="section-title">Where to buy</h2>
+    <div class="store-sort">
+      <button class="chip" data-sort="cheapest">Cheapest</button>
+      <button class="chip" data-sort="recent">Most recent</button>
+    </div>
+    <div id="wheretobuy"></div>
+    <h2 class="section-title" style="margin-top:24px">All prices</h2>
+    <ul class="history-list">${history.map(r => `
+      <li class="history-item">
+        <div class="history-main">
+          <div class="history-price">${peso(r.observed_price)}</div>
+          <div class="history-unit">${peso(r.calculated_unit_price)} / ${escape(r.base_unit)}</div>
+        </div>
+        <div class="history-meta">
+          <div class="history-store">${escape(r.store?.name || 'Unknown store')}</div>
+          <div class="history-sub">${formatDate(r.observation_date)} · ${escape(r.observer?.username || 'someone')}</div>
+          ${r.notes ? `<div class="history-notes">${escape(r.notes)}</div>` : ''}
+        </div>
+      </li>`).join('')}</ul>`;
+
+  const summary = computeStoreSummary(history);
+  const cheapestId = summary.cheapest ? summary.cheapest.storeId : null;
+
+  const renderStores = () => {
+    const list = [...summary.stores];
+    if (storeSort === 'cheapest') list.sort((a, b) => a.latestPrice - b.latestPrice);
+    else list.sort((a, b) => (a.latestDate < b.latestDate ? 1 : -1));
+    document.getElementById('wheretobuy').innerHTML = list.map(s => `
+      <div class="store-card ${s.storeId === cheapestId ? 'is-cheapest' : ''}">
+        <div class="store-card-main">
+          <div class="store-card-name">${escape(s.storeName)}${s.storeId === cheapestId ? ' <span class="badge-cheap">Cheapest</span>' : ''}</div>
+          <div class="store-card-sub">${s.location ? escape(s.location) + ' · ' : ''}updated ${escape(relativeDays(s.latestDate))}</div>
+        </div>
+        <div class="store-card-price">
+          <div class="store-card-amount">${peso(s.latestPrice)}</div>
+          <div class="store-card-unit">${peso(s.latestUnitPrice)} / ${escape(s.baseUnit)}</div>
+        </div>
+      </div>`).join('');
+    el.querySelectorAll('.chip').forEach(c =>
+      c.classList.toggle('chip-active', c.dataset.sort === storeSort));
+  };
+
+  el.querySelectorAll('.chip').forEach(c => {
+    c.onclick = () => { storeSort = c.dataset.sort; renderStores(); };
+  });
+  renderStores();
 }
 
-async function openPriceForm(product) {
+export async function openPriceForm(product, { defaultStoreId = null, onSaved = null } = {}) {
   let stores = [];
   try { stores = await storeRepository.getStores(); } catch { /* handled below */ }
 
@@ -96,7 +136,7 @@ async function openPriceForm(product) {
     <p class="subtitle" style="margin-bottom:16px">${escape(product.name)} ${escape(sizeLabel(product))}</p>
     <label class="field"><span>Store</span>
       <select id="o-store">${stores.map(s =>
-        `<option value="${s.id}">${escape(s.name)}${s.location ? ' — ' + escape(s.location) : ''}</option>`).join('')}</select></label>
+        `<option value="${s.id}" ${s.id === defaultStoreId ? 'selected' : ''}>${escape(s.name)}${s.location ? ' — ' + escape(s.location) : ''}</option>`).join('')}</select></label>
     <label class="field"><span>Price (₱)</span>
       <input id="o-price" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 90" /></label>
     <p class="hint" id="o-unit">Unit price will show here as you type.</p>
@@ -157,7 +197,7 @@ async function openPriceForm(product) {
         packageUnit: product.package_unit,
       });
       close();
-      renderHistory(product);
+      if (onSaved) onSaved();
     } catch (err) {
       fail(err.message || 'Could not save the price.');
       saveBtn.disabled = false; saveBtn.textContent = 'Save price';

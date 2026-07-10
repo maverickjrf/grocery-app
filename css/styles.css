@@ -171,3 +171,28 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
   padding: 12px 28px; border-radius: 12px; border: none; background: #fff;
   color: #000; font-weight: 600; font-size: 16px; cursor: pointer;
 }
+
+.list-item-open {
+  flex: 1; min-width: 0; text-align: left; background: none; border: none;
+  padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer;
+}
+
+.detail-head { margin-bottom: 20px; }
+.detail-title { font-size: 20px; font-weight: 600; }
+.detail-sub { color: var(--text-muted); margin-top: 4px; }
+.detail-meta { color: var(--text-muted); font-size: 13px; margin-top: 6px; }
+.section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text-muted); }
+
+.history-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.history-item {
+  display: flex; justify-content: space-between; gap: 12px; align-items: flex-start;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px;
+}
+.history-main { flex-shrink: 0; }
+.history-price { font-size: 18px; font-weight: 700; }
+.history-unit { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.history-meta { text-align: right; }
+.history-store { font-weight: 600; }
+.history-sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.history-notes { font-size: 13px; color: var(--text-muted); margin-top: 4px; font-style: italic; }
+.hint-strong { color: var(--primary); font-weight: 600; }

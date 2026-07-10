@@ -2,6 +2,7 @@ import { render, escape, icons } from './ui.js';
 import { productRepository } from './products.js';
 import { UNIT_OPTIONS, perBaseLabel } from './units.js';
 import { scanBarcode } from './scanner.js';
+import { showProductDetail } from './product_detail.js';
 
 const BOX_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -50,17 +51,22 @@ async function renderList(onExit) {
     return;
   }
 
-  content.innerHTML = `<ul class="list">${products.map(p => `
+    content.innerHTML = `<ul class="list">${products.map(p => `
     <li class="list-item">
-      <div class="list-item-main">
+      <button class="list-item-main list-item-open" data-open="${p.id}">
         <div class="list-item-title">${escape(p.name)} ${escape(formatSize(p))}</div>
         <div class="list-item-sub">${[p.brand, p.category].filter(Boolean).map(escape).join(' · ') || 'No brand'}</div>
-      </div>
+      </button>
       <div class="list-item-actions">
         <button class="icon-btn" data-edit="${p.id}" aria-label="Edit">${icons.edit}</button>
       </div>
     </li>`).join('')}</ul>`;
 
+  content.querySelectorAll('[data-open]').forEach(btn => {
+    btn.onclick = () => showProductDetail(
+      products.find(p => p.id === btn.dataset.open),
+      () => showProductsScreen(onExit));
+  });
   content.querySelectorAll('[data-edit]').forEach(btn => {
     btn.onclick = () => openForm(onExit, products.find(p => p.id === btn.dataset.edit));
   });

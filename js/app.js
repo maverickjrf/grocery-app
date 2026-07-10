@@ -1,22 +1,14 @@
+import { render, escape, icons } from './ui.js';
 import { authRepository } from './auth.js';
 import { householdRepository } from './household.js';
-
-const app = document.getElementById('app');
-const render = (html) => { app.innerHTML = html; };
-const escape = (s) => String(s).replace(/[&<>"]/g, c =>
-  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-const CART_ICON = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-  stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle>
-  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>`;
+import { showStoresScreen } from './stores_screen.js';
 
 // ---------- LOGIN / SIGNUP ----------
 function showAuthScreen(mode = 'signin') {
   const isSignup = mode === 'signup';
   render(`
     <div class="screen-center"><div class="card">
-      <div class="brand"><div class="brand-badge">${CART_ICON}</div>
+      <div class="brand"><div class="brand-badge">${icons.cart}</div>
         <h1>Grocery Price Tracker</h1></div>
       <p class="subtitle">${isSignup ? 'Create your account' : 'Welcome back'}</p>
       <label class="field"><span>Username</span>
@@ -37,14 +29,12 @@ function showAuthScreen(mode = 'signin') {
   document.getElementById('toggle').onclick = (e) => {
     e.preventDefault(); showAuthScreen(isSignup ? 'signin' : 'signup');
   };
-
   submitEl.onclick = async () => {
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
     errorEl.hidden = true;
     if (!username || !password) return showError('Please enter a username and password.');
     if (password.length < 6) return showError('Password must be at least 6 characters.');
-
     submitEl.disabled = true;
     submitEl.textContent = isSignup ? 'Creating…' : 'Signing in…';
     try {
@@ -66,25 +56,22 @@ function friendlyError(err) {
   return msg;
 }
 
-// ---------- ROUTER: sends you to the household gate or home ----------
+// ---------- ROUTER ----------
 async function showMain() {
   render(`<div class="loading">Loading…</div>`);
   let household;
-  try {
-    household = await householdRepository.getMyHousehold();
-  } catch (err) {
-    return showAuthScreen('signin');
-  }
+  try { household = await householdRepository.getMyHousehold(); }
+  catch { return showAuthScreen('signin'); }
   if (household) showHome(household);
   else showHouseholdGate('create');
 }
 
-// ---------- CREATE OR JOIN A HOUSEHOLD ----------
+// ---------- CREATE / JOIN HOUSEHOLD ----------
 function showHouseholdGate(mode = 'create') {
   const isJoin = mode === 'join';
   render(`
     <div class="screen-center"><div class="card">
-      <div class="brand"><div class="brand-badge">${CART_ICON}</div>
+      <div class="brand"><div class="brand-badge">${icons.cart}</div>
         <h1>${isJoin ? 'Join a household' : 'Create a household'}</h1></div>
       <p class="subtitle">${isJoin
         ? 'Enter the invite code a family member shared with you.'
@@ -110,12 +97,10 @@ function showHouseholdGate(mode = 'create') {
   document.getElementById('logout').onclick = async (e) => {
     e.preventDefault(); await authRepository.signOut(); showAuthScreen('signin');
   };
-
   submitEl.onclick = async () => {
     const value = document.getElementById('hinput').value.trim();
     errorEl.hidden = true;
     if (!value) return showError(isJoin ? 'Please enter an invite code.' : 'Please enter a household name.');
-
     submitEl.disabled = true;
     submitEl.textContent = isJoin ? 'Joining…' : 'Creating…';
     try {
@@ -134,7 +119,7 @@ function showHouseholdGate(mode = 'create') {
 function showHome(household) {
   render(`
     <div class="screen-center"><div class="card">
-      <div class="brand"><div class="brand-badge">${CART_ICON}</div>
+      <div class="brand"><div class="brand-badge">${icons.cart}</div>
         <h1>${escape(household.name)}</h1></div>
       <p class="subtitle">You're the ${escape(household.role)} of this household.</p>
       <label class="field"><span>Invite code — share this to add family members</span>
@@ -143,7 +128,7 @@ function showHome(household) {
           <button id="copy" class="btn-copy">Copy</button>
         </div>
       </label>
-      <p class="subtitle" style="margin-top:24px">Next we'll add stores and start recording prices.</p>
+      <button id="stores" class="btn-primary" style="margin-top:20px">Manage stores</button>
       <button id="logout" class="btn-secondary">Log out</button>
     </div></div>`);
 
@@ -153,11 +138,11 @@ function showHome(household) {
       await navigator.clipboard.writeText(household.inviteCode);
       b.textContent = 'Copied!';
       setTimeout(() => { b.textContent = 'Copy'; }, 1500);
-    } catch { /* clipboard blocked — the code is visible to copy manually */ }
+    } catch { /* code is visible to copy manually */ }
   };
+  document.getElementById('stores').onclick = () => showStoresScreen(() => showHome(household));
   document.getElementById('logout').onclick = async () => {
-    await authRepository.signOut();
-    showAuthScreen('signin');
+    await authRepository.signOut(); showAuthScreen('signin');
   };
 }
 

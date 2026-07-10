@@ -67,3 +67,66 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
   cursor: pointer; font-size: 14px; white-space: nowrap;
 }
 .btn-copy:hover { border-color: var(--primary); }
+
+.brand-badge { color: #fff; }
+
+.app-screen { min-height: 100vh; display: flex; flex-direction: column; }
+.app-bar {
+  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 8px;
+  padding: 12px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.app-bar-title { font-size: 18px; font-weight: 600; }
+.app-content { flex: 1; padding: 16px 16px 96px; max-width: 640px; width: 100%; margin: 0 auto; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 10px; border: none;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.icon-btn:hover { background: var(--bg); color: var(--text); }
+.icon-btn svg { width: 20px; height: 20px; }
+
+.list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.list-item {
+  display: flex; align-items: center; gap: 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px;
+}
+.list-item-main { flex: 1; min-width: 0; }
+.list-item-title { font-weight: 600; }
+.list-item-sub { font-size: 14px; color: var(--text-muted); margin-top: 2px; }
+.list-item-actions { display: flex; gap: 2px; }
+.list-item.is-archived { opacity: 0.6; }
+.tag {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; background: var(--bg);
+  color: var(--text-muted); padding: 2px 7px; border-radius: 6px; margin-left: 6px;
+}
+.show-archived {
+  display: flex; align-items: center; gap: 8px; font-size: 14px;
+  color: var(--text-muted); margin-bottom: 14px; cursor: pointer;
+}
+.show-archived input { width: 16px; height: 16px; }
+
+.fab {
+  position: fixed; right: 20px; bottom: 24px; width: 56px; height: 56px;
+  border-radius: 50%; border: none; background: var(--primary); color: #fff;
+  cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+  display: flex; align-items: center; justify-content: center;
+}
+.fab svg { width: 26px; height: 26px; }
+.fab:hover { background: var(--primary-dark); }
+
+.empty-state { text-align: center; padding: 48px 16px; color: var(--text-muted); }
+.empty-icon {
+  width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; color: var(--text-muted);
+}
+.empty-icon svg { width: 30px; height: 30px; }
+.empty-state p { margin: 4px 0; }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100;
+}
+.modal { background: var(--surface); border-radius: 18px; padding: 24px; max-width: 400px; width: 100%; }
+.modal h2 { font-size: 18px; margin-bottom: 18px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+.modal-actions .btn-primary, .modal-actions .btn-secondary { margin-top: 0; }

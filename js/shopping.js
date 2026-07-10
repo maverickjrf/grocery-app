@@ -4,6 +4,7 @@ import { observationRepository } from './observations.js';
 import { computeStoreSummary, relativeDays } from './insights.js';
 import { session } from './session.js';
 import { openPriceForm, showProductDetail } from './product_detail.js';
+import { openProductForm } from './product_form.js';
 import { escape } from './ui.js';
 
 const peso = (n) => '₱' + Number(n).toLocaleString('en-PH',
@@ -16,26 +17,49 @@ function sizeLabel(p) {
 
 export async function startShoppingScan(onHome) {
   const code = await scanBarcode();
-  if (!code) return;
+  if (!code) return; // cancelled — home is still underneath
   let product = null;
   try { product = await productRepository.findByBarcode(code); }
   catch (err) { alert(err.message || 'Lookup failed.'); return; }
 
-  if (!product) { showNotFound(code); return; }
-  showFoundPanel(product, onHome);
+  if (product) showFoundPanel(product, onHome);
+  else showNotFound(code, onHome);
 }
 
-function showNotFound(code) {
+// Close the current panel and jump straight into another scan
+function scanNext(overlay, onHome) {
+  overlay.remove();
+  startShoppingScan(onHome);
+}
+
+function loopButtons() {
+  return `<div class="scan-loop">
+    <button class="btn-primary" id="next">Scan next</button>
+    <button class="btn-secondary" id="done">Done</button>
+  </div>`;
+}
+
+function showNotFound(code, onHome) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `<div class="modal">
-    <h2>Not in your products yet</h2>
-    <p class="subtitle" style="margin-bottom:8px">Barcode ${escape(code)} isn't in your list. Add it from Manage products first, then you can record its price.</p>
-    <div class="modal-actions"><button class="btn-primary" id="ok">OK</button></div></div>`;
+    <h2>New product</h2>
+    <p class="subtitle" style="margin-bottom:16px">Barcode ${escape(code)} isn't in your products yet. Add it now so you can record its price.</p>
+    <button class="btn-secondary" id="add" style="margin-bottom:4px">Add this product</button>
+    ${loopButtons()}</div>`;
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
-  overlay.querySelector('#ok').onclick = close;
+
+  overlay.querySelector('#add').onclick = () => {
+    close();
+    openProductForm({
+      prefill: { barcode: code, scannedNew: true },
+      onSaved: (saved) => { if (saved) showFoundPanel(saved, onHome); },
+    });
+  };
+  overlay.querySelector('#next').onclick = () => scanNext(overlay, onHome);
+  overlay.querySelector('#done').onclick = close;
 }
 
 function showFoundPanel(product, onHome) {
@@ -47,10 +71,10 @@ function showFoundPanel(product, onHome) {
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
   const paint = async () => {
+    const currentStoreId = session.getCurrentStoreId();
     let history = [];
     try { history = await observationRepository.getHistoryForProduct(product.id); } catch { /* show anyway */ }
     const summary = computeStoreSummary(history);
-    const currentStoreId = session.getCurrentStoreId();
 
     const cheapestHtml = summary.cheapest
       ? `<div class="cheapest-callout">
@@ -67,12 +91,13 @@ function showFoundPanel(product, onHome) {
       ${cheapestHtml}
       <button class="btn-primary" id="record">Record price here</button>
       <button class="btn-secondary" id="history">View full history</button>
-      <button class="btn-text" id="close">Close</button>`;
+      ${loopButtons()}`;
 
     overlay.querySelector('#record').onclick = () =>
       openPriceForm(product, { defaultStoreId: currentStoreId, onSaved: () => paint() });
     overlay.querySelector('#history').onclick = () => { close(); showProductDetail(product, onHome); };
-    overlay.querySelector('#close').onclick = close;
+    overlay.querySelector('#next').onclick = () => scanNext(overlay, onHome);
+    overlay.querySelector('#done').onclick = close;
   };
 
   paint();

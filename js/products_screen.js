@@ -26,7 +26,11 @@ async function renderList(onExit, includeArchived) {
         <h1 class="app-bar-title">Products</h1>
         <button class="icon-btn app-bar-action" id="scan" aria-label="Scan barcode">${icons.scan}</button>
       </header>
-      <div class="app-content"><div class="loading">Loading…</div></div>
+      <div class="app-content">
+        <input id="product-search" class="search-input" type="search"
+          placeholder="Search products by name, brand, category, barcode" />
+        <div id="product-list"><div class="loading">Loading…</div></div>
+      </div>
       <button class="fab" id="add" aria-label="Add product">${icons.plus}</button>
     </div>`);
   const reload = () => renderList(onExit, includeArchived);
@@ -34,11 +38,12 @@ async function renderList(onExit, includeArchived) {
   document.getElementById('add').onclick = () => openProductForm({ onSaved: reload });
   document.getElementById('scan').onclick = () => scanAndRoute(reload);
 
-  const content = document.querySelector('.app-content');
+  const listEl = document.getElementById('product-list');
+  const searchEl = document.getElementById('product-search');
   let products;
   try { products = await productRepository.getProducts({ includeArchived }); }
   catch (err) {
-    content.innerHTML = `<p class="error">${escape(err.message || 'Could not load products.')}</p>`;
+    listEl.innerHTML = `<p class="error">${escape(err.message || 'Could not load products.')}</p>`;
     return;
   }
 
@@ -46,50 +51,61 @@ async function renderList(onExit, includeArchived) {
     <input type="checkbox" id="showArchived" ${includeArchived ? 'checked' : ''} />
     Show archived products</label>`;
 
-  if (!products.length) {
-    content.innerHTML = toggle + `
-      <div class="empty-state">
-        <div class="empty-icon">${BOX_ICON}</div>
-        <p>${includeArchived ? 'No products found.' : 'No products yet.'}</p>
-        <p class="subtitle">Add items you buy — or tap the scan icon to add one by barcode.</p>
-      </div>`;
+  const matches = (p, q) => {
+    if (!q) return true;
+    const hay = [p.name, p.brand, p.category, p.barcode].filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(q);
+  };
+
+  const paintList = () => {
+    const q = searchEl.value.trim().toLowerCase();
+    const shown = products.filter(p => matches(p, q));
+
+    if (!shown.length) {
+      listEl.innerHTML = toggle + `
+        <div class="empty-state">
+          <div class="empty-icon">${BOX_ICON}</div>
+          <p>${products.length ? 'No products match your search.' : (includeArchived ? 'No products found.' : 'No products yet.')}</p>
+          <p class="subtitle">${products.length ? 'Try a different term.' : 'Add items you buy — or tap the scan icon to add one by barcode.'}</p>
+        </div>`;
+    } else {
+      listEl.innerHTML = toggle + `<ul class="list">${shown.map(p => `
+        <li class="list-item ${p.archived ? 'is-archived' : ''}">
+          <button class="list-item-main list-item-open" data-open="${p.id}">
+            <div class="list-item-title">${escape(p.name)} ${escape(formatSize(p))}${p.archived ? ' <span class="tag">Archived</span>' : ''}</div>
+            <div class="list-item-sub">${[p.brand, p.category].filter(Boolean).map(escape).join(' · ') || 'No brand'}</div>
+          </button>
+          <div class="list-item-actions">
+            ${p.archived
+              ? `<button class="link-btn" data-restore="${p.id}">Restore</button>`
+              : `<button class="icon-btn" data-edit="${p.id}" aria-label="Edit">${icons.edit}</button>
+                 <button class="icon-btn" data-del="${p.id}" aria-label="Delete">${icons.trash}</button>`}
+          </div>
+        </li>`).join('')}</ul>`;
+    }
+
     document.getElementById('showArchived').onchange = (e) => renderList(onExit, e.target.checked);
-    return;
-  }
+    listEl.querySelectorAll('[data-open]').forEach(btn => {
+      btn.onclick = () => showProductDetail(
+        products.find(p => p.id === btn.dataset.open),
+        () => showProductsScreen(onExit));
+    });
+    listEl.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.onclick = () => openProductForm({ product: products.find(p => p.id === btn.dataset.edit), onSaved: reload });
+    });
+    listEl.querySelectorAll('[data-del]').forEach(btn => {
+      btn.onclick = () => confirmDeleteProduct(products.find(p => p.id === btn.dataset.del), reload);
+    });
+    listEl.querySelectorAll('[data-restore]').forEach(btn => {
+      btn.onclick = async () => {
+        try { await productRepository.setArchived(btn.dataset.restore, false); reload(); }
+        catch (err) { alert(err.message || 'Could not restore the product.'); }
+      };
+    });
+  };
 
-  content.innerHTML = toggle + `<ul class="list">${products.map(p => `
-    <li class="list-item ${p.archived ? 'is-archived' : ''}">
-      <button class="list-item-main list-item-open" data-open="${p.id}">
-        <div class="list-item-title">${escape(p.name)} ${escape(formatSize(p))}${p.archived ? ' <span class="tag">Archived</span>' : ''}</div>
-        <div class="list-item-sub">${[p.brand, p.category].filter(Boolean).map(escape).join(' · ') || 'No brand'}</div>
-      </button>
-      <div class="list-item-actions">
-        ${p.archived
-          ? `<button class="link-btn" data-restore="${p.id}">Restore</button>`
-          : `<button class="icon-btn" data-edit="${p.id}" aria-label="Edit">${icons.edit}</button>
-             <button class="icon-btn" data-del="${p.id}" aria-label="Delete">${icons.trash}</button>`}
-      </div>
-    </li>`).join('')}</ul>`;
-
-  document.getElementById('showArchived').onchange = (e) => renderList(onExit, e.target.checked);
-
-  content.querySelectorAll('[data-open]').forEach(btn => {
-    btn.onclick = () => showProductDetail(
-      products.find(p => p.id === btn.dataset.open),
-      () => showProductsScreen(onExit));
-  });
-  content.querySelectorAll('[data-edit]').forEach(btn => {
-    btn.onclick = () => openProductForm({ product: products.find(p => p.id === btn.dataset.edit), onSaved: reload });
-  });
-  content.querySelectorAll('[data-del]').forEach(btn => {
-    btn.onclick = () => confirmDeleteProduct(products.find(p => p.id === btn.dataset.del), reload);
-  });
-  content.querySelectorAll('[data-restore]').forEach(btn => {
-    btn.onclick = async () => {
-      try { await productRepository.setArchived(btn.dataset.restore, false); reload(); }
-      catch (err) { alert(err.message || 'Could not restore the product.'); }
-    };
-  });
+  searchEl.oninput = paintList;
+  paintList();
 }
 
 async function confirmDeleteProduct(product, reload) {

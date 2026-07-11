@@ -1,5 +1,6 @@
 import { render, escape, icons } from './ui.js';
 import { storeRepository } from './stores.js';
+import { attachSuggest } from './suggest.js';
 
 export function showStoresScreen(onExit) {
   renderList(onExit, { includeArchived: false });
@@ -101,6 +102,7 @@ function openForm(onExit, store, includeArchived) {
   overlay.querySelector('#cancel').onclick = close;
 
   const nameInput = overlay.querySelector('#s-name');
+  attachSuggest(nameInput, 'store');
   nameInput.focus();
   const errorEl = overlay.querySelector('#m-error');
   const saveBtn = overlay.querySelector('#save');

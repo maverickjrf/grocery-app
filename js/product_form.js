@@ -2,6 +2,7 @@ import { escape, icons } from './ui.js';
 import { productRepository } from './products.js';
 import { UNIT_OPTIONS, perBaseLabel } from './units.js';
 import { scanBarcode } from './scanner.js';
+import { attachSuggest } from './suggest.js';
 
 // options: { product (edit mode), prefill:{barcode, scannedNew}, onSaved(savedProduct) }
 export function openProductForm({ product = null, prefill = {}, onSaved = null } = {}) {
@@ -58,6 +59,9 @@ export function openProductForm({ product = null, prefill = {}, onSaved = null }
   };
 
   const nameInput = overlay.querySelector('#p-name');
+  attachSuggest(nameInput, 'product');
+  attachSuggest(overlay.querySelector('#p-brand'), 'brand');
+  attachSuggest(overlay.querySelector('#p-category'), 'category');
   nameInput.focus();
   const errorEl = overlay.querySelector('#m-error');
   const saveBtn = overlay.querySelector('#save');

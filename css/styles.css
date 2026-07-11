@@ -273,3 +273,23 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
   color: var(--primary); cursor: pointer;
 }
 .link-danger { color: var(--error); }
+
+.search-input {
+  width: 100%; padding: 12px 14px; font-size: 16px; border-radius: 12px;
+  border: 1.5px solid var(--border); background: var(--surface); color: var(--text);
+  margin-bottom: 14px;
+}
+.search-input:focus { outline: none; border-color: var(--primary); }
+
+.suggest-wrap { position: relative; }
+.suggest-box {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 20;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  margin-top: 4px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  max-height: 240px; overflow-y: auto;
+}
+.suggest-item {
+  display: block; width: 100%; text-align: left; padding: 11px 14px;
+  background: none; border: none; font-size: 15px; color: var(--text); cursor: pointer;
+}
+.suggest-item:hover, .suggest-item.is-active { background: var(--bg); }

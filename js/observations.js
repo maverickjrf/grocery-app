@@ -46,7 +46,7 @@ export const observationRepository = {
 
   async getHistoryForProduct(productId) {
     const { data, error } = await supabase.from('observations')
-      .select('id, store_id, observed_price, calculated_unit_price, quantity_purchased, observation_date, notes, base_unit, package_quantity, package_unit, store:stores(name, location), observer:profiles!observed_by(username)')
+      .select('id, store_id, observed_price, calculated_unit_price, quantity_purchased, observation_date, notes, base_unit, package_quantity, package_unit, recorded_by_name, store:stores(name, location)')
       .eq('product_id', productId)
       .eq('is_deleted', false)
       .order('observation_date', { ascending: false })

@@ -1,14 +1,13 @@
 import { supabase } from './config.js';
 
 export const householdRepository = {
-  // Returns the current user's household, or null if they haven't joined one yet.
   async getMyHousehold() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('role, household_id, households(id, name, invite_code)')
+      .select('role, household_id, households!profiles_household_id_fkey(id, name, invite_code)')
       .eq('id', user.id)
       .single();
     if (error) throw error;
@@ -29,6 +28,11 @@ export const householdRepository = {
 
   async joinHousehold(inviteCode) {
     const { error } = await supabase.rpc('join_household', { p_invite_code: inviteCode });
+    if (error) throw error;
+  },
+
+  async leaveHousehold() {
+    const { error } = await supabase.rpc('leave_household');
     if (error) throw error;
   },
 };

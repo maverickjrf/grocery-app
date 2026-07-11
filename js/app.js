@@ -6,6 +6,7 @@ import { showProductsScreen } from './products_screen.js';
 import { storeRepository } from './stores.js';
 import { session } from './session.js';
 import { startShoppingScan } from './shopping.js';
+import { confirmDialog } from './dialog.js';
 
 // ---------- LOGIN / SIGNUP ----------
 function showAuthScreen(mode = 'signin') {
@@ -145,6 +146,7 @@ function showHome(household) {
             <button id="copy" class="btn-copy">Copy</button>
           </div>
         </label>
+        <button id="leave" class="btn-secondary">Leave household</button>
         <button id="logout" class="btn-secondary">Log out</button>
       </details>
     </div></div>`);
@@ -163,6 +165,25 @@ function showHome(household) {
     await authRepository.signOut(); showAuthScreen('signin');
   };
   document.getElementById('scan-shop').onclick = () => startShoppingScan(() => showHome(household));
+
+  document.getElementById('leave').onclick = async () => {
+    const choice = await confirmDialog({
+      title: 'Leave this household?',
+      message: 'Your recorded prices stay with the household and your name remains on them. Afterward you can join or create another household.',
+      actions: [
+        { label: 'Leave household', style: 'danger', value: 'leave' },
+        { label: 'Cancel', style: 'text', value: null },
+      ],
+    });
+    if (choice !== 'leave') return;
+    try {
+      await householdRepository.leaveHousehold();
+      session.setCurrentStoreId(null);
+      await showMain();
+    } catch (err) {
+      alert(err.message || 'Could not leave the household.');
+    }
+  };
 
   // Fill the "Shopping at" selector and remember the choice
   (async () => {

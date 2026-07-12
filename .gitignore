@@ -1,0 +1,19 @@
+# Environment / secrets
+.env
+.env.*
+
+# Database dumps — do not commit ad-hoc SQL exports.
+# Tracked migration snippets are the one deliberate exception (see below).
+*.sql
+!docs/migrations/*.sql
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor cruft
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

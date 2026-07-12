@@ -1,0 +1,118 @@
+# Architecture & Context
+
+## Overview
+A household grocery price-tracking Progressive Web App. Family members record
+prices they observe in stores; the app tracks price history, computes unit
+prices, and shows where each product is cheapest. All pricing data is
+user-observed — the app does not scrape or auto-look-up external prices.
+
+## Tech Stack
+- **Front-end:** Vanilla JavaScript (ES modules), no framework, no build step.
+- **Styling:** Hand-written CSS with CSS custom properties; light/dark via
+  `prefers-color-scheme`. Material-ish, not a component library.
+- **Backend:** Supabase (hosted) — Postgres, Auth, Row Level Security (RLS),
+  PostgREST auto-API, RPC functions in PL/pgSQL.
+- **Hosting:** GitHub Pages (static) at https://maverickjrf.github.io/grocery-app/
+- **Barcode scanning:** `@zxing/browser@0.1.5` + `@zxing/library@0.21.3`,
+  loaded as ESM from esm.sh.
+- **Supabase client:** `@supabase/supabase-js@2` from jsdelivr ESM.
+- **Cost:** Zero. Supabase free tier (no credit card), GitHub Pages free.
+
+## Architectural Decisions (and the why)
+
+### Vanilla JS over a framework
+No build tooling means edits deploy by `git push` with nothing to compile.
+Chosen for a beginner-maintained project where operational simplicity beats
+framework ergonomics. Trade-off accepted: manual DOM rendering.
+
+### Supabase over Firebase
+Firebase now requires the Blaze (paid, card-on-file) plan for Storage and Cloud
+Functions. Supabase's free tier needs no card and bundles Postgres + Auth +
+Storage. Relational Postgres also fits the price-history data model better than
+Firestore documents. Trade-off: Supabase has **no built-in offline sync**
+(Firestore did) — see "on hold."
+
+### Repository pattern
+Every table has a `*Repository` object (`js/*.js`) that is the sole owner of its
+Supabase queries. UI never calls Supabase directly. This isolates the backend so
+offline support (or a backend swap) can be inserted in one layer later.
+
+### Username-only auth via synthetic email
+Supabase Auth is email-based; users only want usernames. A username `brad`
+maps to a synthetic address `brad@grocery.local`. Email confirmation is disabled
+because these addresses can't receive mail. Consequence: password reset must be
+done in the backend (SQL `crypt()` update), which was an accepted, deliberate
+choice ("no in-app password reset").
+
+### Multi-tenancy by household, enforced in the database
+All domain tables carry `household_id` and are protected by RLS policies keyed on
+`current_household_id()`. Isolation is enforced by Postgres, not the client — the
+DB refuses to return another household's rows. Households are fully walled off
+from each other (cross-household data sharing was considered and rejected).
+
+### Append-only observations with integrity snapshots
+Price observations are never overwritten (edits allowed, deletes are soft by
+default). Each observation snapshots `package_quantity`/`package_unit`/`base_unit`
+at record time so historical unit prices stay correct even if the product is
+later edited. Each observation also snapshots `recorded_by_name` so attribution
+survives the recorder leaving the household or deleting their account.
+
+### Client-generated UUIDs
+Observations get their `id` from `crypto.randomUUID()` on the device, so a record
+created offline already has its final identity — groundwork for future offline
+sync.
+
+### Unit engine
+`js/units.js` holds a single unit table mapping each unit to a dimension, a base
+unit (volume→L, weight→kg, count→piece), and a conversion factor. Adding a unit
+is a one-line change. Unit price = price / (quantity in base unit).
+
+### Product families
+Variants of the same item (Coca-Cola 330ml / 1.5L / 2L) are grouped by an
+auto-managed `product_families` row, matched case-insensitively on (brand, name).
+An orphan-cleanup trigger deletes families when their last product leaves.
+
+### Type-ahead for data cleanliness
+Free-text fields (product name, brand, category, store name) get type-ahead fed
+by `suggest_*` RPCs returning existing distinct values, steering users toward one
+canonical spelling instead of spawning "Coke" vs "Coca-Cola" after the fact.
+
+### Invite security
+Invite codes are 10 chars from an ambiguity-free alphabet (no O/0, I/1/L), expire
+after 3 days, and support retire/rotate. Join returns three-way feedback: valid /
+real-but-expired-or-retired / not-a-code — the "expired" message is only shown for
+codes that genuinely existed, to avoid leaking which codes are real.
+
+## Implemented Features
+- Auth: username/password sign-up, sign-in, sign-out (synthetic email).
+- Households: create, join by invite code, explicit leave/switch (confirmed),
+  membership history, invite retire/rotate with 3-day expiry.
+- Stores: create, edit, archive/restore, type-ahead on name.
+- Products: create, edit, archive/restore, permanent-delete when price-free;
+  product families (auto), type-ahead on name/brand/category, product search.
+- Barcode scanning: camera scan (phone), lookup by barcode against own DB only,
+  scan-to-prefill new product, continuous "scan next" shopping loop.
+- Price observations: record with auto unit-price, edit, soft-delete or
+  permanent-delete, all with confirmation. Package-size + recorder-name snapshots.
+- Product detail: full price history (newest first) with attribution, and a
+  sortable "Where to buy" store comparison (cheapest / most recent).
+- Shopping mode: set current store (persisted on device), scan → found panel with
+  cheapest-store insight → record price with current store pre-selected.
+
+## On Hold (architected for, not built)
+- **Offline support** — app-shell caching (service worker/PWA) and offline
+  record-and-sync. Groundwork laid: repository pattern, client UUIDs, `updated_at`
+  and soft-delete columns on all tables. Supabase has no native sync, so this is a
+  real build (likely RxDB or a hand-rolled IndexedDB queue) deferred to its own phase.
+- **Product photos** — Supabase Storage free tier available; `photo_url` column
+  exists but unused. User leaning toward scrapping to save resources.
+- **Dashboard & price-trend charts** — next up.
+- **Analytics** — price-increase detection, inflation tracking, store comparison
+  ranking, best-value-per-package, volatility.
+- **Phase 3 smart features** — favorites, shopping basket, per-store basket
+  optimization, price-change alerts/notifications, CSV/Excel export, anomaly
+  detection.
+- **Rejected outright** — cross-household price sharing (store-name matching
+  unreliable, privacy leak), multi-household membership (one active household per
+  user), adopt/copy stores-with-prices (seeds untrustworthy data), curated starter
+  catalog (maintenance burden).

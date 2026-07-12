@@ -113,13 +113,99 @@ function showHouseholdGate(mode = 'create') {
       else await householdRepository.createHousehold(value);
       await showMain();
     } catch (err) {
-      showError((err && err.message) || 'Something went wrong.');
+      showError(friendlyHouseholdError(err));
       submitEl.disabled = false;
       submitEl.textContent = isJoin ? 'Join household' : 'Create household';
     }
   };
 }
 
+function friendlyHouseholdError(err) {
+  const m = (err && err.message) || '';
+  if (m.includes('INVITE_EXPIRED'))
+    return 'This invite code has expired or been retired. Ask a household member to generate a new one.';
+  if (m.includes('INVITE_INVALID'))
+    return "That invite code isn't valid. Double-check it with whoever shared it.";
+  if (m.includes('already in a household'))
+    return 'You are already in a household. Leave it first.';
+  return m || 'Something went wrong.';
+}
+
+function expiryLabel(exp) {
+  const ms = exp - new Date();
+  if (ms <= 0) return 'expired';
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `expires in ${mins} min`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `expires in ${hrs} hour${hrs === 1 ? '' : 's'}`;
+  const days = Math.round(hrs / 24);
+  return `expires in ${days} day${days === 1 ? '' : 's'}`;
+}
+
+async function refreshInviteBlock(blockEl) {
+  try {
+    const hh = await householdRepository.getMyHousehold();
+    if (hh) renderInviteSection(blockEl, hh);
+  } catch { /* ignore */ }
+}
+
+function renderInviteSection(blockEl, household) {
+  const code = household.inviteCode;
+  const exp = household.inviteExpiresAt ? new Date(household.inviteExpiresAt) : null;
+  const active = !!(code && exp && exp > new Date());
+
+  let status;
+  if (active) {
+    status = `<div class="invite-row">
+        <input id="invite" type="text" readonly value="${escape(code)}" />
+        <button id="copy" class="btn-copy">Copy</button>
+      </div>
+      <p class="invite-status">Active · ${escape(expiryLabel(exp))}</p>`;
+  } else if (code) {
+    status = `<p class="invite-status invite-expired">This code has expired. Generate a new one to add members.</p>`;
+  } else {
+    status = `<p class="invite-status">No active invite code. Generate one to add members.</p>`;
+  }
+
+  blockEl.innerHTML = `
+    <span class="field-label">Invite code — share to add family members</span>
+    ${status}
+    <div class="invite-actions">
+      <button id="rotate" class="btn-secondary">Generate new code</button>
+      ${code ? `<button id="retire" class="btn-text">Retire current code</button>` : ''}
+    </div>`;
+
+  const copyBtn = blockEl.querySelector('#copy');
+  if (copyBtn) copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+    } catch { /* code is visible to copy manually */ }
+  };
+
+  const rotateBtn = blockEl.querySelector('#rotate');
+  rotateBtn.onclick = async () => {
+    rotateBtn.disabled = true; rotateBtn.textContent = 'Generating…';
+    try { await householdRepository.rotateInviteCode(); await refreshInviteBlock(blockEl); }
+    catch (err) { alert(err.message || 'Could not generate a new code.'); rotateBtn.disabled = false; rotateBtn.textContent = 'Generate new code'; }
+  };
+
+  const retireBtn = blockEl.querySelector('#retire');
+  if (retireBtn) retireBtn.onclick = async () => {
+    const choice = await confirmDialog({
+      title: 'Retire this invite code?',
+      message: 'The current code will stop working immediately. No one can join until you generate a new one.',
+      actions: [
+        { label: 'Retire code', style: 'danger', value: 'retire' },
+        { label: 'Cancel', style: 'text', value: null },
+      ],
+    });
+    if (choice !== 'retire') return;
+    try { await householdRepository.retireInviteCode(); await refreshInviteBlock(blockEl); }
+    catch (err) { alert(err.message || 'Could not retire the code.'); }
+  };
+}
 // ---------- HOME ----------
 function showHome(household) {
   render(`
@@ -140,25 +226,14 @@ function showHome(household) {
 
       <details class="home-more">
         <summary>Household &amp; account</summary>
-        <label class="field" style="margin-top:12px"><span>Invite code — share to add family members</span>
-          <div class="invite-row">
-            <input id="invite" type="text" readonly value="${escape(household.inviteCode)}" />
-            <button id="copy" class="btn-copy">Copy</button>
-          </div>
-        </label>
+        <div id="invite-block" style="margin-top:12px"></div>
         <button id="leave" class="btn-secondary">Leave household</button>
         <button id="logout" class="btn-secondary">Log out</button>
       </details>
     </div></div>`);
 
-  document.getElementById('copy').onclick = async () => {
-    const b = document.getElementById('copy');
-    try {
-      await navigator.clipboard.writeText(household.inviteCode);
-      b.textContent = 'Copied!';
-      setTimeout(() => { b.textContent = 'Copy'; }, 1500);
-    } catch { /* code is visible to copy manually */ }
-  };
+  renderInviteSection(document.getElementById('invite-block'), household);
+
   document.getElementById('products').onclick = () => showProductsScreen(() => showHome(household));
   document.getElementById('stores').onclick = () => showStoresScreen(() => showHome(household));
   document.getElementById('logout').onclick = async () => {
@@ -185,7 +260,6 @@ function showHome(household) {
     }
   };
 
-  // Fill the "Shopping at" selector and remember the choice
   (async () => {
     const sel = document.getElementById('current-store');
     let stores = [];
@@ -204,7 +278,6 @@ function showHome(household) {
     sel.onchange = () => session.setCurrentStoreId(sel.value);
   })();
 }
-
 // ---------- START ----------
 (async function start() {
   const user = await authRepository.getCurrentUser();

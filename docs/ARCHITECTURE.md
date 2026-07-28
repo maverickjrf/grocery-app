@@ -102,8 +102,15 @@ ever navigates a screen, and only leaves the app once the stack is empty
   callback, which is the single place a modal ever tears down, however it was
   triggered. `modalController` guards against a slow in-flight save calling
   dismiss again after hardware Back already closed the modal.
-- Home is the root: it never calls `pushScreen`, so Back from Home is the
-  browser's native behavior (leaves the app). Pre-login screens (sign-in/up,
+- Home is the root: it never calls `pushScreen`. Back from Home is
+  **double-back-to-exit**: the first press shows a "Press back again to
+  exit" toast and re-arms a buffer history entry; a second press within
+  ~1.8s completes the exit. (A hard block — absorbing Back indefinitely —
+  was tried first and rejected: Chromium-based mobile browsers, Samsung
+  Internet included, actively defeat pages that repeatedly re-push history
+  state to fight Back, since that pattern is commonly abused by scam sites.
+  A one-shot re-arm is far less likely to trip that same protection, but
+  isn't guaranteed on every browser either.) Pre-login screens (sign-in/up,
   create/join household) are intentionally out of scope — Back there is
   unchanged from before.
 

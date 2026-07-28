@@ -6,38 +6,37 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-Branch: `main`. Specs 1 and 3 (see `docs/ROADMAP.md` → "Real-world usage
-fixes") are tested, committed (`f3d33c4`), and **not yet pushed** — waiting on
-a go-ahead to push per "Commit & deploy discipline" in `CLAUDE.md`.
+Branch: `main`, tree clean. All three real-world-usage specs (see
+`docs/ROADMAP.md` → "Real-world usage fixes") are done and confirmed working
+on the human's Android phone (Samsung Internet):
 - **Spec 3 (units):** `js/units.js` — added `mg`, `gallon`, `fl oz` (US
   customary; imperial deliberately skipped, see `docs/ARCHITECTURE.md`).
-- **Spec 1 (search preservation):** `js/products_screen.js` threads search
-  text + archived toggle through the product-detail round trip; `js/ui.js`
-  (new `close` icon) and `css/styles.css` add a clearable, sticky search bar
-  (`.search-row` stays pinned under the header on scroll).
+- **Spec 1 (search preservation):** search text + archived toggle survive
+  the product-detail round trip; clearable, sticky search bar. `f3d33c4`.
+- **Spec 2 (Back-button/history):** `js/nav.js` stack synced with
+  `history.pushState`/`popstate` — hardware Back now navigates in-app and
+  closes modals before leaving a screen. `06f724a`.
 
-**Spec 2 (Back-button/history)** — implemented, **not yet tested or
-committed**. New `js/nav.js` (stack + `pushScreen`/`pushModal`/`goBack`/
-`modalController`, see `docs/ARCHITECTURE.md` → "Navigation & history").
-Wired into `js/dialog.js`, `js/scanner.js`, `js/product_detail.js`,
-`js/product_form.js`, `js/products_screen.js`, `js/stores_screen.js`,
-`js/shopping.js`. `js/app.js` needed no changes (Home is the nav-stack root).
-`js/products_screen.js` and `js/stores_screen.js` were each split into a
-one-time "show" (pushes history) and a repaintable "paint" (search/toggle/
-save refresh, and restoring after a deeper screen is popped) — necessary so
-in-place refreshes don't each add a phantom extra Back level.
+Resolved: **Home exit behavior stays plain-exit.** Two attempts at
+intercepting Back from Home were tried and both failed on the human's phone
+(Samsung Internet), then rolled back via `git revert` (not force-push, to
+keep public history honest):
+- Hard block (absorb Back indefinitely) — `b272593`, reverted as `915f842`.
+- Double-back-to-exit (toast + one-shot re-arm) — `6061444`, reverted as
+  `0acb73a`.
 
-Note on why this was needed: the Spec 1/3 commit (`f3d33c4`, pushed and live)
-does **not** touch navigation at all — the hardware-Back-closes-the-app
-behavior reported after that push was a pre-existing gap (the app never used
-the History API before now), not a regression from that commit.
+Both rely on re-pushing history state from inside a `popstate` handler;
+Samsung Internet (Chromium-based) appears to defeat that technique outright,
+even a single one-shot use, likely as anti-scam-site protection. Conclusion:
+this isn't reliably achievable from web JS on that browser, so Back from Home
+just exits immediately — the behavior already confirmed working in `06f724a`.
+`docs/ARCHITECTURE.md` → "Navigation & history" reflects this as final,
+without the exit-interception history (kept here in STATUS instead, since
+ARCHITECTURE describes current design, not attempts that were tried and
+dropped).
 
 ## Waiting on
-Human to manually test Spec 2 on an Android phone against the live-pushed
-Spec 1/3 build (checklist given in chat), then say "it works, commit it."
-Per discussion, this lands as its own commit on top of `f3d33c4` rather than
-a squash/force-push.
+Nothing. All three specs plus the Back-button work are live and confirmed.
 
 ## Next up
-1. Human tests Spec 2 → commit → push.
-2. Resume Milestone A (dashboard) per `docs/ROADMAP.md`.
+Resume Milestone A (dashboard) per `docs/ROADMAP.md`.

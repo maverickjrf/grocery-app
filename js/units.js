@@ -1,13 +1,18 @@
 // Each unit belongs to a "dimension" and has a factor to convert it to the base unit.
 // Add a future unit = add one line here. Nothing else in the app changes.
+// US customary volume units (gallon, fl oz) — imperial variants deliberately
+// omitted; see ARCHITECTURE.md "Unit engine" for why.
 const UNITS = {
-  ml:    { dimension: 'volume', base: 'L',     factor: 0.001 },
-  L:     { dimension: 'volume', base: 'L',     factor: 1 },
-  g:     { dimension: 'weight', base: 'kg',    factor: 0.001 },
-  kg:    { dimension: 'weight', base: 'kg',    factor: 1 },
-  piece: { dimension: 'count',  base: 'piece', factor: 1 },
-  dozen: { dimension: 'count',  base: 'piece', factor: 12 },
-  pack:  { dimension: 'pack',   base: 'pack',  factor: 1 },
+  ml:      { dimension: 'volume', base: 'L',     factor: 0.001 },
+  L:       { dimension: 'volume', base: 'L',     factor: 1 },
+  'fl oz': { dimension: 'volume', base: 'L',     factor: 0.0295735 },
+  gallon:  { dimension: 'volume', base: 'L',     factor: 3.78541 },
+  mg:      { dimension: 'weight', base: 'kg',    factor: 0.000001 },
+  g:       { dimension: 'weight', base: 'kg',    factor: 0.001 },
+  kg:      { dimension: 'weight', base: 'kg',    factor: 1 },
+  piece:   { dimension: 'count',  base: 'piece', factor: 1 },
+  dozen:   { dimension: 'count',  base: 'piece', factor: 12 },
+  pack:    { dimension: 'pack',   base: 'pack',  factor: 1 },
 };
 
 export const UNIT_OPTIONS = Object.keys(UNITS);

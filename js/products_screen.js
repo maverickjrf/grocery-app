@@ -10,7 +10,7 @@ const BOX_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" st
   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
   <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>`;
 
-export function showProductsScreen(onExit) { renderList(onExit, false); }
+export function showProductsScreen(onExit) { renderList(onExit, false, ''); }
 
 function formatSize(p) {
   const q = Number(p.package_quantity), u = p.package_unit;
@@ -18,7 +18,7 @@ function formatSize(p) {
   return `${q} ${u}${q === 1 ? '' : 's'}`;
 }
 
-async function renderList(onExit, includeArchived) {
+async function renderList(onExit, includeArchived, initialQuery) {
   render(`
     <div class="app-screen">
       <header class="app-bar">
@@ -27,19 +27,28 @@ async function renderList(onExit, includeArchived) {
         <button class="icon-btn app-bar-action" id="scan" aria-label="Scan barcode">${icons.scan}</button>
       </header>
       <div class="app-content">
-        <input id="product-search" class="search-input" type="search"
-          placeholder="Search products by name, brand, category, barcode" />
+        <div class="search-row">
+          <input id="product-search" class="search-input" type="search"
+            placeholder="Search products by name, brand, category, barcode"
+            value="${escape(initialQuery)}" />
+          <button class="icon-btn search-clear" id="search-clear" aria-label="Clear search" hidden>${icons.close}</button>
+        </div>
         <div id="product-list"><div class="loading">Loading…</div></div>
       </div>
       <button class="fab" id="add" aria-label="Add product">${icons.plus}</button>
     </div>`);
-  const reload = () => renderList(onExit, includeArchived);
+  const reload = () => renderList(onExit, includeArchived, searchEl.value);
   document.getElementById('back').onclick = onExit;
   document.getElementById('add').onclick = () => openProductForm({ onSaved: reload });
   document.getElementById('scan').onclick = () => scanAndRoute(reload);
 
   const listEl = document.getElementById('product-list');
   const searchEl = document.getElementById('product-search');
+  const clearEl = document.getElementById('search-clear');
+  const updateClearVisibility = () => { clearEl.hidden = !searchEl.value; };
+  clearEl.onclick = () => { searchEl.value = ''; updateClearVisibility(); paintList(); searchEl.focus(); };
+  updateClearVisibility();
+
   let products;
   try { products = await productRepository.getProducts({ includeArchived }); }
   catch (err) {
@@ -84,11 +93,11 @@ async function renderList(onExit, includeArchived) {
         </li>`).join('')}</ul>`;
     }
 
-    document.getElementById('showArchived').onchange = (e) => renderList(onExit, e.target.checked);
+    document.getElementById('showArchived').onchange = (e) => renderList(onExit, e.target.checked, searchEl.value);
     listEl.querySelectorAll('[data-open]').forEach(btn => {
       btn.onclick = () => showProductDetail(
         products.find(p => p.id === btn.dataset.open),
-        () => showProductsScreen(onExit));
+        () => renderList(onExit, includeArchived, searchEl.value));
     });
     listEl.querySelectorAll('[data-edit]').forEach(btn => {
       btn.onclick = () => openProductForm({ product: products.find(p => p.id === btn.dataset.edit), onSaved: reload });
@@ -104,7 +113,7 @@ async function renderList(onExit, includeArchived) {
     });
   };
 
-  searchEl.oninput = paintList;
+  searchEl.oninput = () => { updateClearVisibility(); paintList(); };
   paintList();
 }
 

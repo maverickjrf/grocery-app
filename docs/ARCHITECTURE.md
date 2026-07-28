@@ -65,7 +65,12 @@ sync.
 ### Unit engine
 `js/units.js` holds a single unit table mapping each unit to a dimension, a base
 unit (volume→L, weight→kg, count→piece), and a conversion factor. Adding a unit
-is a one-line change. Unit price = price / (quantity in base unit).
+is a one-line change. Unit price = price / (quantity in base unit). Supported
+units: ml, L, fl oz, gallon (volume); mg, g, kg (weight); piece, dozen, pack
+(count). Volume units are **US customary** (gallon = 3.78541 L, fl oz =
+0.0295735 L) — imperial variants (UK gallon/fl oz differ by ~20%) are
+deliberately not offered, a decision to revisit if the household base expands
+somewhere imperial units are standard.
 
 ### Product families
 Variants of the same item (Coca-Cola 330ml / 1.5L / 2L) are grouped by an

@@ -2,9 +2,23 @@
 
 ## Status
 MVP complete and in real-world use. Three design-hardening milestones done
-(attribution + leave/switch; type-ahead + search; invite security).
+(attribution + leave/switch; type-ahead + search; invite security). Now doing
+a round of fixes driven by real-world usage (see below) before starting
+Milestone A.
 
 ## Next up
+### Real-world usage fixes (2026-07-28)
+- Preserve products-screen search text, filtered results, and the archived
+  toggle across a detail-screen round trip; add a clear (×) button to the
+  search box. **Done, awaiting human test.**
+- Add `mg`, `gallon`, `fl oz` (US customary) units. **Done, awaiting human
+  test.**
+- Fix Back-button navigation: browser/hardware Back should move up the app's
+  own screen stack and dismiss open modals before navigating, only leaving
+  the app from the home screen. Needs a small centralized nav-stack helper
+  (`js/nav.js`) integrated with the History API. **Plan approved, not yet
+  implemented** — touches every screen and every modal overlay.
+
 ### Milestone A — Dashboard & price-trend chart
 - Dashboard: totals (products, stores, observations), household members list,
   recent-activity feed (latest observations).

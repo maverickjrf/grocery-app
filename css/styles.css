@@ -275,11 +275,21 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
 .link-danger { color: var(--error); }
 
 .search-input {
-  width: 100%; padding: 12px 14px; font-size: 16px; border-radius: 12px;
+  width: 100%; padding: 12px 40px 12px 14px; font-size: 16px; border-radius: 12px;
   border: 1.5px solid var(--border); background: var(--surface); color: var(--text);
-  margin-bottom: 14px;
 }
 .search-input:focus { outline: none; border-color: var(--primary); }
+
+.search-row {
+  position: sticky; top: 65px; z-index: 5;
+  background: var(--bg); padding: 8px 0; margin: -8px 0 6px;
+}
+.search-row .search-input { margin-bottom: 0; }
+.search-clear {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+  width: 32px; height: 32px;
+}
+.search-clear svg { width: 18px; height: 18px; }
 
 .suggest-wrap { position: relative; }
 .suggest-box {

@@ -9,11 +9,6 @@
 // that's what causes phantom extra history levels.
 const stack = []; // { kind: 'screen'|'modal', onBack: fn }
 
-// One buffer history entry so Back at Home always fires popstate (instead of
-// leaving the page outright with no chance to react) — see the popstate
-// listener below for the double-back-to-exit confirmation this enables.
-history.pushState({}, '');
-
 function enter(kind, onBack) {
   history.pushState({}, '');
   stack.push({ kind, onBack });
@@ -49,33 +44,7 @@ export function modalController(overlay) {
   };
 }
 
-const EXIT_CONFIRM_MS = 1800;
-let confirmingExit = false;
-let confirmTimer = null;
-
-function showExitToast() {
-  const toast = document.createElement('div');
-  toast.className = 'exit-toast';
-  toast.textContent = 'Press back again to exit';
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), EXIT_CONFIRM_MS);
-}
-
 window.addEventListener('popstate', () => {
   const top = stack.pop();
-  if (top) { top.onBack(); return; }
-
-  // Nothing of ours left — at Home. A second Back within the window actually
-  // exits (we're already one step into leaving, so finish it); otherwise
-  // absorb this press, hint, and re-arm the buffer entry for next time.
-  if (confirmingExit) {
-    clearTimeout(confirmTimer);
-    confirmingExit = false;
-    history.back();
-    return;
-  }
-  confirmingExit = true;
-  showExitToast();
-  history.pushState({}, '');
-  confirmTimer = setTimeout(() => { confirmingExit = false; }, EXIT_CONFIRM_MS);
+  if (top) top.onBack();
 });

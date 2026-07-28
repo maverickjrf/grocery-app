@@ -5,6 +5,7 @@ import { unitPrice, baseUnitFor } from './units.js';
 import { computeStoreSummary, relativeDays } from './insights.js';
 import { session } from './session.js';
 import { confirmDialog } from './dialog.js';
+import { pushScreen, goBack, modalController } from './nav.js';
 
 const peso = (n) => '₱' + Number(n).toLocaleString('en-PH',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -19,6 +20,7 @@ function formatDate(d) {
 }
 
 export function showProductDetail(product, onBack) {
+  pushScreen(onBack);
   render(`
     <div class="app-screen">
       <header class="app-bar">
@@ -35,7 +37,7 @@ export function showProductDetail(product, onBack) {
       </div>
       <button class="fab" id="record" aria-label="Record price">${icons.plus}</button>
     </div>`);
-  document.getElementById('back').onclick = onBack;
+  document.getElementById('back').onclick = () => goBack();
   document.getElementById('record').onclick = () => openPriceForm(product, {
     defaultStoreId: session.getCurrentStoreId(),
     onSaved: () => loadBody(product),
@@ -166,8 +168,9 @@ export async function openPriceForm(product, { defaultStoreId = null, observatio
       <p class="subtitle" style="margin-bottom:18px">You need at least one store before recording a price. Go back and open Manage stores to add one.</p>
       <div class="modal-actions"><button class="btn-primary" id="ok">OK</button></div></div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector('#ok').onclick = () => overlay.remove();
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    const dismiss = modalController(overlay);
+    overlay.querySelector('#ok').onclick = () => dismiss();
+    overlay.onclick = (e) => { if (e.target === overlay) dismiss(); };
     return;
   }
 
@@ -198,9 +201,9 @@ export async function openPriceForm(product, { defaultStoreId = null, observatio
     </div></div>`;
   document.body.appendChild(overlay);
 
-  const close = () => overlay.remove();
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
-  overlay.querySelector('#cancel').onclick = close;
+  const dismiss = modalController(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) dismiss(); };
+  overlay.querySelector('#cancel').onclick = () => dismiss();
 
   const priceInput = overlay.querySelector('#o-price');
   const unitHint = overlay.querySelector('#o-unit');
@@ -243,7 +246,7 @@ export async function openPriceForm(product, { defaultStoreId = null, observatio
     try {
       if (isEdit) await observationRepository.updateObservation(observation.id, common);
       else await observationRepository.recordObservation({ ...common, productId: product.id });
-      close();
+      dismiss();
       if (onSaved) onSaved();
     } catch (err) {
       fail(err.message || 'Could not save the price.');

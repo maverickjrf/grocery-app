@@ -4,13 +4,17 @@ import { scanBarcode } from './scanner.js';
 import { showProductDetail } from './product_detail.js';
 import { openProductForm } from './product_form.js';
 import { confirmDialog } from './dialog.js';
+import { pushScreen, goBack } from './nav.js';
 
 const BOX_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
   <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>`;
 
-export function showProductsScreen(onExit) { renderList(onExit, false, ''); }
+export function showProductsScreen(onExit) {
+  pushScreen(onExit);
+  paintProductsScreen(onExit, false, '');
+}
 
 function formatSize(p) {
   const q = Number(p.package_quantity), u = p.package_unit;
@@ -18,7 +22,12 @@ function formatSize(p) {
   return `${q} ${u}${q === 1 ? '' : 's'}`;
 }
 
-async function renderList(onExit, includeArchived, initialQuery) {
+// Repaints the whole screen for the given (includeArchived, query) state.
+// Used for a fresh entry (via showProductsScreen), for in-place refreshes
+// (search/toggle/save), and to restore this screen when the detail screen's
+// Back is triggered — never calls pushScreen itself, so none of those add a
+// phantom extra level to the nav stack.
+async function paintProductsScreen(onExit, includeArchived, initialQuery) {
   render(`
     <div class="app-screen">
       <header class="app-bar">
@@ -37,8 +46,8 @@ async function renderList(onExit, includeArchived, initialQuery) {
       </div>
       <button class="fab" id="add" aria-label="Add product">${icons.plus}</button>
     </div>`);
-  const reload = () => renderList(onExit, includeArchived, searchEl.value);
-  document.getElementById('back').onclick = onExit;
+  const reload = () => paintProductsScreen(onExit, includeArchived, searchEl.value);
+  document.getElementById('back').onclick = () => goBack();
   document.getElementById('add').onclick = () => openProductForm({ onSaved: reload });
   document.getElementById('scan').onclick = () => scanAndRoute(reload);
 
@@ -93,11 +102,11 @@ async function renderList(onExit, includeArchived, initialQuery) {
         </li>`).join('')}</ul>`;
     }
 
-    document.getElementById('showArchived').onchange = (e) => renderList(onExit, e.target.checked, searchEl.value);
+    document.getElementById('showArchived').onchange = (e) => paintProductsScreen(onExit, e.target.checked, searchEl.value);
     listEl.querySelectorAll('[data-open]').forEach(btn => {
       btn.onclick = () => showProductDetail(
         products.find(p => p.id === btn.dataset.open),
-        () => renderList(onExit, includeArchived, searchEl.value));
+        () => paintProductsScreen(onExit, includeArchived, searchEl.value));
     });
     listEl.querySelectorAll('[data-edit]').forEach(btn => {
       btn.onclick = () => openProductForm({ product: products.find(p => p.id === btn.dataset.edit), onSaved: reload });

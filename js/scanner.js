@@ -1,5 +1,6 @@
 import { BrowserMultiFormatReader } from 'https://esm.sh/@zxing/browser@0.1.5';
 import { DecodeHintType, BarcodeFormat } from 'https://esm.sh/@zxing/library@0.21.3';
+import { pushModal, goBack } from './nav.js';
 
 // Focus on the barcode types found on groceries (plus QR). Restricting the list
 // makes 1D retail barcodes decode faster and more reliably than trying everything.
@@ -32,13 +33,22 @@ export function scanBarcode() {
     const reader = new BrowserMultiFormatReader(hints);
     let controls = null;
     let done = false;
+    let resultValue = null;
+
+    // The only place this overlay actually closes — cancel, a successful
+    // scan, or hardware/browser Back all funnel here via finish()/goBack().
+    pushModal(() => {
+      done = true;
+      try { controls && controls.stop(); } catch { /* already stopped */ }
+      overlay.remove();
+      resolve(resultValue);
+    });
 
     const finish = (value) => {
       if (done) return;
       done = true;
-      try { controls && controls.stop(); } catch { /* already stopped */ }
-      overlay.remove();
-      resolve(value);
+      resultValue = value;
+      goBack();
     };
 
     cancelBtn.onclick = () => finish(null);

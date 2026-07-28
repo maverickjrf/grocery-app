@@ -3,6 +3,7 @@ import { productRepository } from './products.js';
 import { UNIT_OPTIONS, perBaseLabel } from './units.js';
 import { scanBarcode } from './scanner.js';
 import { attachSuggest } from './suggest.js';
+import { modalController } from './nav.js';
 
 // options: { product (edit mode), prefill:{barcode, scannedNew}, onSaved(savedProduct) }
 export function openProductForm({ product = null, prefill = {}, onSaved = null } = {}) {
@@ -44,9 +45,9 @@ export function openProductForm({ product = null, prefill = {}, onSaved = null }
     </div>`;
   document.body.appendChild(overlay);
 
-  const close = () => overlay.remove();
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
-  overlay.querySelector('#cancel').onclick = close;
+  const dismiss = modalController(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) dismiss(); };
+  overlay.querySelector('#cancel').onclick = () => dismiss();
 
   const unitSel = overlay.querySelector('#p-unit');
   const hint = overlay.querySelector('#p-hint');
@@ -87,7 +88,7 @@ export function openProductForm({ product = null, prefill = {}, onSaved = null }
       let saved;
       if (isEdit) { await productRepository.updateProduct(product.id, payload); saved = product; }
       else { saved = await productRepository.createProduct(payload); }
-      close();
+      dismiss();
       if (onSaved) onSaved(saved);
     } catch (err) {
       fail(err.message || 'Could not save the product.');

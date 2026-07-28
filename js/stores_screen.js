@@ -1,12 +1,17 @@
 import { render, escape, icons } from './ui.js';
 import { storeRepository } from './stores.js';
 import { attachSuggest } from './suggest.js';
+import { pushScreen, goBack, modalController } from './nav.js';
 
 export function showStoresScreen(onExit) {
-  renderList(onExit, { includeArchived: false });
+  pushScreen(onExit);
+  paintStoresScreen(onExit, { includeArchived: false });
 }
 
-async function renderList(onExit, { includeArchived }) {
+// Repaints the whole screen — used for a fresh entry (via showStoresScreen)
+// and for in-place refreshes (toggle/edit/archive/save). Never calls
+// pushScreen itself, so refreshes don't add a phantom nav-stack level.
+async function paintStoresScreen(onExit, { includeArchived }) {
   render(`
     <div class="app-screen">
       <header class="app-bar">
@@ -16,7 +21,7 @@ async function renderList(onExit, { includeArchived }) {
       <div class="app-content"><div class="loading">Loading…</div></div>
       <button class="fab" id="add" aria-label="Add store">${icons.plus}</button>
     </div>`);
-  document.getElementById('back').onclick = onExit;
+  document.getElementById('back').onclick = () => goBack();
   document.getElementById('add').onclick = () => openForm(onExit, null, includeArchived);
 
   const content = document.querySelector('.app-content');
@@ -59,7 +64,7 @@ async function renderList(onExit, { includeArchived }) {
     <ul class="list">${items}</ul>`;
 
   document.getElementById('showArchived').onchange = (e) =>
-    renderList(onExit, { includeArchived: e.target.checked });
+    paintStoresScreen(onExit, { includeArchived: e.target.checked });
 
   content.querySelectorAll('[data-edit]').forEach(btn => {
     btn.onclick = () => openForm(onExit, stores.find(s => s.id === btn.dataset.edit), includeArchived);
@@ -69,7 +74,7 @@ async function renderList(onExit, { includeArchived }) {
       btn.disabled = true;
       try {
         await storeRepository.setArchived(btn.dataset.archive, btn.dataset.archived !== 'true');
-        renderList(onExit, { includeArchived });
+        paintStoresScreen(onExit, { includeArchived });
       } catch (err) {
         alert(err.message || 'Could not update the store.');
         btn.disabled = false;
@@ -97,9 +102,9 @@ function openForm(onExit, store, includeArchived) {
     </div>`;
   document.body.appendChild(overlay);
 
-  const close = () => overlay.remove();
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
-  overlay.querySelector('#cancel').onclick = close;
+  const dismiss = modalController(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) dismiss(); };
+  overlay.querySelector('#cancel').onclick = () => dismiss();
 
   const nameInput = overlay.querySelector('#s-name');
   attachSuggest(nameInput, 'store');
@@ -116,8 +121,8 @@ function openForm(onExit, store, includeArchived) {
     try {
       if (isEdit) await storeRepository.updateStore(store.id, { name, location });
       else await storeRepository.createStore(name, location);
-      close();
-      renderList(onExit, { includeArchived });
+      dismiss();
+      paintStoresScreen(onExit, { includeArchived });
     } catch (err) {
       errorEl.textContent = err.message || 'Could not save the store.';
       errorEl.hidden = false;

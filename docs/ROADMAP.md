@@ -15,9 +15,9 @@ Milestone A.
   test.**
 - Fix Back-button navigation: browser/hardware Back should move up the app's
   own screen stack and dismiss open modals before navigating, only leaving
-  the app from the home screen. Needs a small centralized nav-stack helper
-  (`js/nav.js`) integrated with the History API. **Plan approved, not yet
-  implemented** — touches every screen and every modal overlay.
+  the app from the home screen. Small centralized nav-stack helper
+  (`js/nav.js`) integrated with the History API. **Done, awaiting human
+  test** — see `docs/ARCHITECTURE.md` → "Navigation & history".
 
 ### Milestone A — Dashboard & price-trend chart
 - Dashboard: totals (products, stores, observations), household members list,

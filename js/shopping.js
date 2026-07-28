@@ -6,6 +6,7 @@ import { session } from './session.js';
 import { openPriceForm, showProductDetail } from './product_detail.js';
 import { openProductForm } from './product_form.js';
 import { escape } from './ui.js';
+import { modalController } from './nav.js';
 
 const peso = (n) => '₱' + Number(n).toLocaleString('en-PH',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -26,12 +27,6 @@ export async function startShoppingScan(onHome) {
   else showNotFound(code, onHome);
 }
 
-// Close the current panel and jump straight into another scan
-function scanNext(overlay, onHome) {
-  overlay.remove();
-  startShoppingScan(onHome);
-}
-
 function loopButtons() {
   return `<div class="scan-loop">
     <button class="btn-primary" id="next">Scan next</button>
@@ -48,18 +43,15 @@ function showNotFound(code, onHome) {
     <button class="btn-secondary" id="add" style="margin-bottom:4px">Add this product</button>
     ${loopButtons()}</div>`;
   document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const dismiss = modalController(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) dismiss(); };
 
-  overlay.querySelector('#add').onclick = () => {
-    close();
-    openProductForm({
-      prefill: { barcode: code, scannedNew: true },
-      onSaved: (saved) => { if (saved) showFoundPanel(saved, onHome); },
-    });
-  };
-  overlay.querySelector('#next').onclick = () => scanNext(overlay, onHome);
-  overlay.querySelector('#done').onclick = close;
+  overlay.querySelector('#add').onclick = () => dismiss(() => openProductForm({
+    prefill: { barcode: code, scannedNew: true },
+    onSaved: (saved) => { if (saved) showFoundPanel(saved, onHome); },
+  }));
+  overlay.querySelector('#next').onclick = () => dismiss(() => startShoppingScan(onHome));
+  overlay.querySelector('#done').onclick = () => dismiss();
 }
 
 function showFoundPanel(product, onHome) {
@@ -67,8 +59,8 @@ function showFoundPanel(product, onHome) {
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `<div class="modal"><div class="loading">Loading…</div></div>`;
   document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const dismiss = modalController(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) dismiss(); };
 
   const paint = async () => {
     const currentStoreId = session.getCurrentStoreId();
@@ -95,9 +87,9 @@ function showFoundPanel(product, onHome) {
 
     overlay.querySelector('#record').onclick = () =>
       openPriceForm(product, { defaultStoreId: currentStoreId, onSaved: () => paint() });
-    overlay.querySelector('#history').onclick = () => { close(); showProductDetail(product, onHome); };
-    overlay.querySelector('#next').onclick = () => scanNext(overlay, onHome);
-    overlay.querySelector('#done').onclick = close;
+    overlay.querySelector('#history').onclick = () => dismiss(() => showProductDetail(product, onHome));
+    overlay.querySelector('#next').onclick = () => dismiss(() => startShoppingScan(onHome));
+    overlay.querySelector('#done').onclick = () => dismiss();
   };
 
   paint();

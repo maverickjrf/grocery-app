@@ -82,6 +82,31 @@ Free-text fields (product name, brand, category, store name) get type-ahead fed
 by `suggest_*` RPCs returning existing distinct values, steering users toward one
 canonical spelling instead of spawning "Coke" vs "Coca-Cola" after the fact.
 
+### Navigation & history
+`js/nav.js` is a small stack (`pushScreen`, `pushModal`, `goBack`,
+`modalController`) kept in lockstep with `history.pushState`/`popstate`, so
+the hardware/browser Back button and the app's own back arrows / modal-close
+controls always run the same code path — Back closes the top modal before it
+ever navigates a screen, and only leaves the app once the stack is empty
+(i.e. from Home). Two rules keep it correct:
+- `pushScreen`/`pushModal` is called **once per genuine entry** (a button or
+  list item opening a screen/modal) — never from a function that merely
+  repaints an already-entered level (search filtering, a post-save refresh,
+  or restoring a screen when something deeper is popped). Screens that redraw
+  in place are split into a one-time "show" function and a repaintable
+  "paint" function for this reason (see `products_screen.js`,
+  `stores_screen.js`).
+- Modal close paths (Cancel, backdrop click, a completed save) never remove
+  the overlay directly — they call `goBack()`/`modalController`'s returned
+  dismiss function, and the actual removal happens in the `pushModal`
+  callback, which is the single place a modal ever tears down, however it was
+  triggered. `modalController` guards against a slow in-flight save calling
+  dismiss again after hardware Back already closed the modal.
+- Home is the root: it never calls `pushScreen`, so Back from Home is the
+  browser's native behavior (leaves the app). Pre-login screens (sign-in/up,
+  create/join household) are intentionally out of scope — Back there is
+  unchanged from before.
+
 ### Invite security
 Invite codes are 10 chars from an ambiguity-free alphabet (no O/0, I/1/L), expire
 after 3 days, and support retire/rotate. Join returns three-way feedback: valid /

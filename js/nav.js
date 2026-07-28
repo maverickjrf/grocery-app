@@ -9,13 +9,6 @@
 // that's what causes phantom extra history levels.
 const stack = []; // { kind: 'screen'|'modal', onBack: fn }
 
-// One extra history entry so Back always has somewhere same-document to go
-// (and therefore always fires popstate, which we can catch) even from Home,
-// where our own stack is empty. Without this, the very first Back press at
-// Home would leave the page entirely — real navigation, no popstate — and
-// the app would exit.
-history.pushState({}, '');
-
 function enter(kind, onBack) {
   history.pushState({}, '');
   stack.push({ kind, onBack });
@@ -53,11 +46,5 @@ export function modalController(overlay) {
 
 window.addEventListener('popstate', () => {
   const top = stack.pop();
-  if (top) {
-    top.onBack();
-  } else {
-    // At Home (or before it) with nothing of ours left — refill the guard
-    // entry so this Back press is absorbed instead of exiting the app.
-    history.pushState({}, '');
-  }
+  if (top) top.onBack();
 });

@@ -102,12 +102,10 @@ ever navigates a screen, and only leaves the app once the stack is empty
   callback, which is the single place a modal ever tears down, however it was
   triggered. `modalController` guards against a slow in-flight save calling
   dismiss again after hardware Back already closed the modal.
-- Home is the root: it never calls `pushScreen`. Back from Home is
-  **hard-blocked** — a guard `history.pushState` is refilled every time Back
-  is pressed with an empty stack, so it's absorbed instead of exiting the
-  app (standard PWA/installed-app behavior; leave via the OS home/recents
-  instead). Pre-login screens (sign-in/up, create/join household) are
-  intentionally out of scope — Back there is unchanged from before.
+- Home is the root: it never calls `pushScreen`, so Back from Home is the
+  browser's native behavior (leaves the app). Pre-login screens (sign-in/up,
+  create/join household) are intentionally out of scope — Back there is
+  unchanged from before.
 
 ### Invite security
 Invite codes are 10 chars from an ambiguity-free alphabet (no O/0, I/1/L), expire

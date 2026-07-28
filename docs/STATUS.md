@@ -6,38 +6,38 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-Branch: `main`. All three real-world-usage specs (see `docs/ROADMAP.md` →
-"Real-world usage fixes") are done:
+Branch: `main`. Specs 1 and 3 (see `docs/ROADMAP.md` → "Real-world usage
+fixes") are tested, committed (`f3d33c4`), and **not yet pushed** — waiting on
+a go-ahead to push per "Commit & deploy discipline" in `CLAUDE.md`.
 - **Spec 3 (units):** `js/units.js` — added `mg`, `gallon`, `fl oz` (US
   customary; imperial deliberately skipped, see `docs/ARCHITECTURE.md`).
 - **Spec 1 (search preservation):** `js/products_screen.js` threads search
   text + archived toggle through the product-detail round trip; `js/ui.js`
-  (new `close` icon) and `css/styles.css` add a clearable, sticky search bar.
-  Committed and pushed as `f3d33c4`.
-- **Spec 2 (Back-button/history):** `js/nav.js` (stack +
-  `pushScreen`/`pushModal`/`goBack`/`modalController`, see
-  `docs/ARCHITECTURE.md` → "Navigation & history"), wired into
-  `js/dialog.js`, `js/scanner.js`, `js/product_detail.js`,
-  `js/product_form.js`, `js/products_screen.js`, `js/stores_screen.js`,
-  `js/shopping.js`. Committed and pushed as `06f724a`, **confirmed working by
-  the human on Android** (hardware Back now navigates in-app and closes
-  modals before leaving a screen).
+  (new `close` icon) and `css/styles.css` add a clearable, sticky search bar
+  (`.search-row` stays pinned under the header on scroll).
 
-Uncommitted follow-up, not yet pushed: Back at Home now hard-blocks instead
-of exiting (a guard `history.pushState` in `js/nav.js` is refilled whenever
-Back fires with an empty stack) — the human's request after confirming Spec 2
-worked; you leave the app via the OS home/recents instead. Doc note added to
-`docs/ARCHITECTURE.md` → "Navigation & history".
+**Spec 2 (Back-button/history)** — implemented, **not yet tested or
+committed**. New `js/nav.js` (stack + `pushScreen`/`pushModal`/`goBack`/
+`modalController`, see `docs/ARCHITECTURE.md` → "Navigation & history").
+Wired into `js/dialog.js`, `js/scanner.js`, `js/product_detail.js`,
+`js/product_form.js`, `js/products_screen.js`, `js/stores_screen.js`,
+`js/shopping.js`. `js/app.js` needed no changes (Home is the nav-stack root).
+`js/products_screen.js` and `js/stores_screen.js` were each split into a
+one-time "show" (pushes history) and a repaintable "paint" (search/toggle/
+save refresh, and restoring after a deeper screen is popped) — necessary so
+in-place refreshes don't each add a phantom extra Back level.
 
-Note on the earlier confusion: the hardware-Back-closes-the-app behavior seen
-right after `f3d33c4` was not caused by that commit (it touched no
-navigation code) — it was a pre-existing gap Spec 2 has now fixed.
+Note on why this was needed: the Spec 1/3 commit (`f3d33c4`, pushed and live)
+does **not** touch navigation at all — the hardware-Back-closes-the-app
+behavior reported after that push was a pre-existing gap (the app never used
+the History API before now), not a regression from that commit.
 
 ## Waiting on
-Nothing — human is testing the Home exit-guard change live on Android next,
-same pattern as before (push first, rollback via `git revert` if it breaks
-anything, since they're the only user right now).
+Human to manually test Spec 2 on an Android phone against the live-pushed
+Spec 1/3 build (checklist given in chat), then say "it works, commit it."
+Per discussion, this lands as its own commit on top of `f3d33c4` rather than
+a squash/force-push.
 
 ## Next up
-1. Confirm the Home exit-guard behaves as expected.
+1. Human tests Spec 2 → commit → push.
 2. Resume Milestone A (dashboard) per `docs/ROADMAP.md`.

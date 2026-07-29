@@ -1,7 +1,7 @@
 import { render, escape, icons } from './ui.js';
 import { storeRepository } from './stores.js';
 import { observationRepository } from './observations.js';
-import { unitPrice, baseUnitFor } from './units.js';
+import { pricePerBase, pricePerSubunit, scalePerBasePrice, formatPackage, baseUnitFor } from './units.js';
 import { computeStoreSummary, relativeDays } from './insights.js';
 import { session } from './session.js';
 import { confirmDialog } from './dialog.js';
@@ -10,10 +10,21 @@ import { pushScreen, goBack, modalController } from './nav.js';
 const peso = (n) => '₱' + Number(n).toLocaleString('en-PH',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function sizeLabel(p) {
-  const q = Number(p.package_quantity), u = p.package_unit;
-  return ['ml', 'L', 'g', 'kg'].includes(u) ? `${q}${u}` : `${q} ${u}${q === 1 ? '' : 's'}`;
+// The derived-price line for one observation, read off its OWN package snapshot:
+// "₱60.00 / L", or "₱33.33 / g · ₱10.00 each" when it came in multiples.
+function unitPriceLine(r) {
+  const count = Number(r.unit_count ?? 1);
+  const scaled = scalePerBasePrice(Number(r.calculated_unit_price), r.base_unit);
+  let line = `${peso(scaled.price)} / ${escape(scaled.unit)}`;
+  if (count > 1) {
+    const each = r.calculated_price_per_subunit != null
+      ? Number(r.calculated_price_per_subunit)
+      : pricePerSubunit(Number(r.observed_price), count);
+    line += ` · ${peso(each)} each`;
+  }
+  return line;
 }
+
 function formatDate(d) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-PH',
     { year: 'numeric', month: 'short', day: 'numeric' });
@@ -29,7 +40,7 @@ export function showProductDetail(product, onBack) {
       </header>
       <div class="app-content">
         <div class="detail-head">
-          <div class="detail-title">${escape(product.name)} ${escape(sizeLabel(product))}</div>
+          <div class="detail-title">${escape(product.name)} ${escape(formatPackage(product))}</div>
           <div class="detail-sub">${[product.brand, product.category].filter(Boolean).map(escape).join(' · ') || 'No brand'}</div>
           ${product.barcode ? `<div class="detail-meta">Barcode: ${escape(product.barcode)}</div>` : ''}
         </div>
@@ -77,7 +88,7 @@ async function loadBody(product) {
         <div class="history-row">
           <div class="history-main">
             <div class="history-price">${peso(r.observed_price)}</div>
-            <div class="history-unit">${peso(r.calculated_unit_price)} / ${escape(r.base_unit)}</div>
+            <div class="history-unit">${unitPriceLine(r)}</div>
           </div>
           <div class="history-meta">
             <div class="history-store">${escape(r.store?.name || 'Unknown store')}</div>
@@ -94,6 +105,14 @@ async function loadBody(product) {
   // Where-to-buy comparison
   const summary = computeStoreSummary(history);
   const cheapestId = summary.cheapest ? summary.cheapest.storeId : null;
+  const storeUnitLine = (s) => {
+    const scaled = scalePerBasePrice(s.latestUnitPrice, s.baseUnit);
+    let line = `${peso(scaled.price)} / ${escape(scaled.unit)}`;
+    if (s.latestUnitCount > 1 && s.latestSubunitPrice != null) {
+      line += ` · ${peso(s.latestSubunitPrice)} each`;
+    }
+    return line;
+  };
   const renderStores = () => {
     const list = [...summary.stores];
     if (storeSort === 'cheapest') list.sort((a, b) => a.latestPrice - b.latestPrice);
@@ -106,7 +125,7 @@ async function loadBody(product) {
         </div>
         <div class="store-card-price">
           <div class="store-card-amount">${peso(s.latestPrice)}</div>
-          <div class="store-card-unit">${peso(s.latestUnitPrice)} / ${escape(s.baseUnit)}</div>
+          <div class="store-card-unit">${storeUnitLine(s)}</div>
         </div>
       </div>`).join('');
     el.querySelectorAll('.chip').forEach(c =>
@@ -152,8 +171,12 @@ async function confirmDeletePrice(product, o) {
 // Shared add/edit price form. Pass `observation` to edit an existing entry.
 export async function openPriceForm(product, { defaultStoreId = null, observation = null, onSaved = null } = {}) {
   const isEdit = !!observation;
-  const pkgQty = isEdit ? Number(observation.package_quantity) : Number(product.package_quantity);
-  const pkgUnit = isEdit ? observation.package_unit : product.package_unit;
+  // On edit, the package comes from the observation's OWN snapshot — never from
+  // the live product, so reshaping a product can't rewrite its price history.
+  const src = isEdit ? observation : product;
+  const pkgCount = Number(src.unit_count ?? 1);
+  const pkgSize = Number(src.unit_size);
+  const pkgUnit = src.unit_size_unit;
   const base = baseUnitFor(pkgUnit);
 
   let stores = [];
@@ -179,7 +202,7 @@ export async function openPriceForm(product, { defaultStoreId = null, observatio
 
   overlay.innerHTML = `<div class="modal modal-scroll">
     <h2>${isEdit ? 'Edit price' : 'Record price'}</h2>
-    <p class="subtitle" style="margin-bottom:16px">${escape(product.name)} ${escape(sizeLabel(product))}</p>
+    <p class="subtitle" style="margin-bottom:16px">${escape(product.name)} ${escape(formatPackage(src))}</p>
     <label class="field"><span>Store</span>
       <select id="o-store">${stores.map(s =>
         `<option value="${s.id}" ${s.id === selectedStore ? 'selected' : ''}>${escape(s.name)}${s.location ? ' — ' + escape(s.location) : ''}</option>`).join('')}</select></label>
@@ -210,7 +233,9 @@ export async function openPriceForm(product, { defaultStoreId = null, observatio
   const updateUnit = () => {
     const v = parseFloat(priceInput.value);
     if (v > 0) {
-      unitHint.textContent = `= ${peso(unitPrice(v, pkgQty, pkgUnit))} per ${base}`;
+      const scaled = scalePerBasePrice(pricePerBase(v, pkgCount, pkgSize, pkgUnit), base);
+      unitHint.textContent = `= ${peso(scaled.price)} per ${scaled.unit}`
+        + (pkgCount > 1 ? ` · ${peso(pricePerSubunit(v, pkgCount))} each` : '');
       unitHint.classList.add('hint-strong');
     } else {
       unitHint.textContent = 'Unit price will show here as you type.';
@@ -240,8 +265,9 @@ export async function openPriceForm(product, { defaultStoreId = null, observatio
       quantityPurchased: qtyRaw ? parseFloat(qtyRaw) : null,
       observationDate: date,
       notes: overlay.querySelector('#o-notes').value,
-      packageQuantity: pkgQty,
-      packageUnit: pkgUnit,
+      unitCount: pkgCount,
+      unitSize: pkgSize,
+      unitSizeUnit: pkgUnit,
     };
     try {
       if (isEdit) await observationRepository.updateObservation(observation.id, common);

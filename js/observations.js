@@ -1,5 +1,34 @@
 import { supabase } from './config.js';
-import { unitPrice, baseUnitFor } from './units.js';
+import { pricePerBase, pricePerSubunit, baseUnitFor } from './units.js';
+
+const HISTORY_FIELDS =
+  'id, store_id, observed_price, calculated_unit_price, calculated_price_per_subunit, ' +
+  'quantity_purchased, observation_date, notes, base_unit, unit_count, unit_size, unit_size_unit, ' +
+  'recorded_by_name, store:stores(name, location)';
+
+// The package snapshot every observation carries, so history stays correct even
+// if the product is later reshaped. `p` supplies unitCount/unitSize/unitSizeUnit —
+// from the product when recording, from the row's OWN snapshot when editing.
+function packageSnapshot(p) {
+  const count = p.unitCount > 0 ? p.unitCount : 1;
+  return {
+    unit_count: count,
+    unit_size: p.unitSize,
+    unit_size_unit: p.unitSizeUnit,
+    base_unit: baseUnitFor(p.unitSizeUnit),
+    // Legacy snapshot columns, kept in step for one migration cycle.
+    package_quantity: count * p.unitSize,
+    package_unit: p.unitSizeUnit,
+  };
+}
+
+function prices(p) {
+  const count = p.unitCount > 0 ? p.unitCount : 1;
+  return {
+    calculated_unit_price: pricePerBase(p.observedPrice, count, p.unitSize, p.unitSizeUnit),
+    calculated_price_per_subunit: pricePerSubunit(p.observedPrice, count),
+  };
+}
 
 export const observationRepository = {
   async recordObservation(p) {
@@ -8,20 +37,19 @@ export const observationRepository = {
       store_id: p.storeId,
       observed_price: p.observedPrice,
       quantity_purchased: p.quantityPurchased ?? null,
-      calculated_unit_price: unitPrice(p.observedPrice, p.packageQuantity, p.packageUnit),
-      package_quantity: p.packageQuantity,
-      package_unit: p.packageUnit,
-      base_unit: baseUnitFor(p.packageUnit),
       observation_date: p.observationDate,
       notes: (p.notes || '').trim() || null,
       source: 'price_update',
+      ...packageSnapshot(p),
+      ...prices(p),
     };
     if (crypto && crypto.randomUUID) row.id = crypto.randomUUID();
     const { error } = await supabase.from('observations').insert(row);
     if (error) throw error;
   },
 
-  // Edit an existing entry. Recalculates the unit price from its own package snapshot.
+  // Edit an existing entry. Recalculates both prices from its own package
+  // snapshot — never from the live product row.
   async updateObservation(id, p) {
     const { error } = await supabase.from('observations').update({
       store_id: p.storeId,
@@ -29,7 +57,7 @@ export const observationRepository = {
       quantity_purchased: p.quantityPurchased ?? null,
       observation_date: p.observationDate,
       notes: (p.notes || '').trim() || null,
-      calculated_unit_price: unitPrice(p.observedPrice, p.packageQuantity, p.packageUnit),
+      ...prices(p),
     }).eq('id', id);
     if (error) throw error;
   },
@@ -46,7 +74,7 @@ export const observationRepository = {
 
   async getHistoryForProduct(productId) {
     const { data, error } = await supabase.from('observations')
-      .select('id, store_id, observed_price, calculated_unit_price, quantity_purchased, observation_date, notes, base_unit, package_quantity, package_unit, recorded_by_name, store:stores(name, location)')
+      .select(HISTORY_FIELDS)
       .eq('product_id', productId)
       .eq('is_deleted', false)
       .order('observation_date', { ascending: false })

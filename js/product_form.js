@@ -1,6 +1,6 @@
 import { escape, icons } from './ui.js';
 import { productRepository } from './products.js';
-import { UNIT_OPTIONS, perBaseLabel } from './units.js';
+import { UNIT_OPTIONS, perBaseLabel, formatPackage } from './units.js';
 import { scanBarcode } from './scanner.js';
 import { attachSuggest } from './suggest.js';
 import { modalController } from './nav.js';
@@ -9,8 +9,10 @@ import { modalController } from './nav.js';
 export function openProductForm({ product = null, prefill = {}, onSaved = null } = {}) {
   const isEdit = !!product;
   const barcodeValue = isEdit ? (product.barcode || '') : (prefill.barcode || '');
+  // A product that already comes in multiples opens with the count section shown.
+  const startsMulti = isEdit && Number(product.unit_count) > 1;
   const unitOptions = UNIT_OPTIONS.map(u =>
-    `<option value="${u}" ${isEdit && product.package_unit === u ? 'selected' : ''}>${u}</option>`).join('');
+    `<option value="${u}" ${isEdit && product.unit_size_unit === u ? 'selected' : ''}>${u}</option>`).join('');
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -24,13 +26,19 @@ export function openProductForm({ product = null, prefill = {}, onSaved = null }
         <input id="p-brand" type="text" value="${isEdit && product.brand ? escape(product.brand) : ''}" placeholder="e.g. Coca-Cola" /></label>
       <label class="field"><span>Category (optional)</span>
         <input id="p-category" type="text" value="${isEdit && product.category ? escape(product.category) : ''}" placeholder="e.g. Beverages" /></label>
+      <label class="field" id="p-count-field" ${startsMulti ? '' : 'hidden'}><span>How many per pack?</span>
+        <input id="p-count" type="number" inputmode="numeric" min="1" step="1"
+          value="${startsMulti ? escape(String(product.unit_count)) : ''}" placeholder="e.g. 10" /></label>
       <div class="field-row">
-        <label class="field"><span>Package size</span>
-          <input id="p-qty" type="number" inputmode="decimal" min="0" step="any"
-            value="${isEdit ? escape(product.package_quantity) : ''}" placeholder="1.5" /></label>
+        <label class="field"><span id="p-size-label">${startsMulti ? 'Size of each' : 'Package size'}</span>
+          <input id="p-size" type="number" inputmode="decimal" min="0" step="any"
+            value="${isEdit ? escape(String(product.unit_size)) : ''}" placeholder="1.5" /></label>
         <label class="field"><span>Unit</span>
           <select id="p-unit">${unitOptions}</select></label>
       </div>
+      <button type="button" class="link-btn pack-toggle" id="p-multi">${startsMulti
+        ? 'This is a single item'
+        : 'This comes in multiples (e.g. 10 sachets, 100 capsules)'}</button>
       <p class="hint" id="p-hint"></p>
       <label class="field"><span>Barcode (optional)</span>
         <div class="scan-row">
@@ -50,9 +58,47 @@ export function openProductForm({ product = null, prefill = {}, onSaved = null }
   overlay.querySelector('#cancel').onclick = () => dismiss();
 
   const unitSel = overlay.querySelector('#p-unit');
+  const sizeInput = overlay.querySelector('#p-size');
+  const countField = overlay.querySelector('#p-count-field');
+  const countInput = overlay.querySelector('#p-count');
+  const sizeLabelEl = overlay.querySelector('#p-size-label');
+  const multiBtn = overlay.querySelector('#p-multi');
   const hint = overlay.querySelector('#p-hint');
-  const updateHint = () => { hint.textContent = `Price will be tracked ${perBaseLabel(unitSel.value)}.`; };
-  unitSel.onchange = updateHint; updateHint();
+
+  let multi = startsMulti;
+  const currentCount = () => {
+    if (!multi) return 1;
+    const c = parseInt(countInput.value, 10);
+    return c > 0 ? c : 1;
+  };
+
+  // Live preview: "100 × 300mg (30g) · price tracked per kg"
+  const updateHint = () => {
+    const size = parseFloat(sizeInput.value);
+    const tracked = `Price will be tracked ${perBaseLabel(unitSel.value)}.`;
+    if (!(size > 0)) { hint.textContent = tracked; return; }
+    const label = formatPackage({
+      unit_count: currentCount(), unit_size: size, unit_size_unit: unitSel.value,
+    });
+    hint.textContent = `${label} · ${tracked.toLowerCase()}`;
+  };
+
+  const setMulti = (on) => {
+    multi = on;
+    countField.hidden = !on;
+    sizeLabelEl.textContent = on ? 'Size of each' : 'Package size';
+    multiBtn.textContent = on
+      ? 'This is a single item'
+      : 'This comes in multiples (e.g. 10 sachets, 100 capsules)';
+    if (on) countInput.focus(); else countInput.value = '';
+    updateHint();
+  };
+  multiBtn.onclick = () => setMulti(!multi);
+
+  unitSel.onchange = updateHint;
+  sizeInput.oninput = updateHint;
+  countInput.oninput = updateHint;
+  updateHint();
 
   overlay.querySelector('#p-scan').onclick = async () => {
     const code = await scanBarcode();
@@ -70,24 +116,33 @@ export function openProductForm({ product = null, prefill = {}, onSaved = null }
 
   saveBtn.onclick = async () => {
     const name = nameInput.value.trim();
-    const qty = parseFloat(overlay.querySelector('#p-qty').value);
+    const size = parseFloat(sizeInput.value);
     errorEl.hidden = true;
     if (!name) return fail('Please enter a product name.');
-    if (!qty || qty <= 0) return fail('Please enter a package size greater than 0.');
+    if (!size || size <= 0) {
+      return fail(multi ? 'Please enter the size of each one, greater than 0.'
+        : 'Please enter a package size greater than 0.');
+    }
+    let count = 1;
+    if (multi) {
+      count = parseInt(countInput.value, 10);
+      if (!count || count < 1) return fail('Please enter how many come in the pack (1 or more).');
+    }
 
     saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
     const payload = {
       name,
       brand: overlay.querySelector('#p-brand').value,
       category: overlay.querySelector('#p-category').value,
-      packageQuantity: qty,
-      packageUnit: unitSel.value,
+      unitCount: count,
+      unitSize: size,
+      unitSizeUnit: unitSel.value,
       barcode: overlay.querySelector('#p-barcode').value,
     };
     try {
-      let saved;
-      if (isEdit) { await productRepository.updateProduct(product.id, payload); saved = product; }
-      else { saved = await productRepository.createProduct(payload); }
+      const saved = isEdit
+        ? await productRepository.updateProduct(product.id, payload)
+        : await productRepository.createProduct(payload);
       dismiss();
       if (onSaved) onSaved(saved);
     } catch (err) {

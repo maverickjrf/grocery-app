@@ -6,15 +6,11 @@ import { session } from './session.js';
 import { openPriceForm, showProductDetail } from './product_detail.js';
 import { openProductForm } from './product_form.js';
 import { escape } from './ui.js';
+import { formatPackage } from './units.js';
 import { modalController } from './nav.js';
 
 const peso = (n) => '₱' + Number(n).toLocaleString('en-PH',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-function sizeLabel(p) {
-  const q = Number(p.package_quantity), u = p.package_unit;
-  return ['ml', 'L', 'g', 'kg'].includes(u) ? `${q}${u}` : `${q} ${u}${q === 1 ? '' : 's'}`;
-}
 
 export async function startShoppingScan(onHome) {
   const code = await scanBarcode();
@@ -78,7 +74,7 @@ function showFoundPanel(product, onHome) {
       : `<p class="subtitle" style="margin:8px 0 16px">No prices recorded yet — be the first to log one.</p>`;
 
     overlay.querySelector('.modal').innerHTML = `
-      <h2>${escape(product.name)} ${escape(sizeLabel(product))}</h2>
+      <h2>${escape(product.name)} ${escape(formatPackage(product))}</h2>
       <div class="found-sub">${[product.brand, product.category].filter(Boolean).map(escape).join(' · ') || 'No brand'}</div>
       ${cheapestHtml}
       <button class="btn-primary" id="record">Record price here</button>

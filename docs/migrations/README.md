@@ -42,3 +42,4 @@ the live project, cross-checked against `docs/schema.md`.
 | `0005_observations.sql` | `observations` table + RLS (append-only, soft-delete via `is_deleted`). |
 | `0006_invite_security.sql` | `retired_codes`, `rotate_invite_code()`, `retire_invite_code()`, `join_household()`. |
 | `0007_membership_and_attribution.sql` | `household_memberships`, `shares_household_history()`, `leave_household()`, `set_observation_recorder()`, and the `profiles` SELECT policy (deferred from 0002). |
+| `0008_two_level_package_model.sql` | Adds `unit_count`/`unit_size`/`unit_size_unit`/`total_base_quantity` to `products` and the matching snapshot + `calculated_price_per_subunit` to `observations`; backfills every existing row as `unit_count = 1`. Legacy `package_quantity`/`package_unit`/`normalized_quantity` columns kept as a rollback net for one cycle. No RLS changes (row-level policies cover new columns automatically). |

@@ -72,6 +72,30 @@ units: ml, L, fl oz, gallon (volume); mg, g, kg (weight); piece, dozen, pack
 deliberately not offered, a decision to revisit if the household base expands
 somewhere imperial units are standard.
 
+### Two-level package model (count × unit-size)
+A product's package is `unit_count` sub-units of `unit_size` each — a simple
+product (1.5L Coke) is `unit_count = 1`; a multi-unit product (100 softgels of
+300mg; 10 sachets of 80g) has `unit_count > 1`. `total_base_quantity` is
+`unit_count × unit_size` normalized to the dimension's base unit, and is what
+products are sorted/compared by (replacing `normalized_quantity`).
+`js/units.js` derives two prices from this, both pure and additive to the
+existing single-table design — `pricePerSubunit` (price ÷ count, e.g. ₱/softgel)
+and `pricePerBase` (price ÷ total_base_quantity, e.g. ₱/kg). A display ladder
+(`scaleQuantity`, `scalePerBasePrice`) restates a large total or a per-base price
+at human scale (30000mg → 30g; ₱33,333/kg → ₱33.33/g) without changing what's
+stored — each observation's own snapshot decides its own display, so reshaping
+a product later never retro-scales old history.
+
+Legacy columns (`package_quantity`, `package_unit`, `normalized_quantity`) are
+kept in step by the app for one migration cycle as a rollback safety net — see
+`docs/migrations/0008_two_level_package_model.sql`. A later migration removes
+them once the new model is proven.
+
+The add/edit product form defaults to exactly the old single-quantity layout
+(Size + Unit); a "This comes in multiples" toggle reveals the Count field.
+Package display format: `1.5L` when count = 1 (unchanged), `10 × 80g (800g)`
+when count > 1 — count, size of each, computed total in parentheses.
+
 ### Product families
 Variants of the same item (Coca-Cola 330ml / 1.5L / 2L) are grouped by an
 auto-managed `product_families` row, matched case-insensitively on (brand, name).

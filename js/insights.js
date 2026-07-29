@@ -1,6 +1,6 @@
 // history: observations for ONE product, newest first, each with
 // store_id, store:{name,location}, observed_price, calculated_unit_price,
-// observation_date, base_unit
+// calculated_price_per_subunit, unit_count, observation_date, base_unit
 export function computeStoreSummary(history) {
   const byStore = new Map();
   for (const o of history) {
@@ -13,6 +13,9 @@ export function computeStoreSummary(history) {
         location: o.store?.location || null,
         latestPrice: Number(o.observed_price),
         latestUnitPrice: Number(o.calculated_unit_price),
+        latestSubunitPrice: o.calculated_price_per_subunit != null
+          ? Number(o.calculated_price_per_subunit) : null,
+        latestUnitCount: Number(o.unit_count ?? 1),
         latestDate: o.observation_date,
         baseUnit: o.base_unit,
         lowestPrice: Number(o.observed_price),

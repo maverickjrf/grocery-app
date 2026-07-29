@@ -98,10 +98,14 @@ Remembers every household a user was ever in (for past-member attribution).
 | name                | text NOT NULL |                              |
 | brand               | text        |                                |
 | category            | text        |                                |
-| package_quantity    | numeric NOT NULL |                           |
-| package_unit        | text NOT NULL | ml,L,g,kg,piece,pack,dozen     |
-| base_unit           | text NOT NULL | L,kg,piece,pack                |
-| normalized_quantity | numeric NOT NULL | quantity in base unit       |
+| unit_count          | numeric NOT NULL default 1 | sub-units per package (softgels, sachets); simple products = 1; `check > 0` |
+| unit_size           | numeric NOT NULL | size of one sub-unit; `check > 0`      |
+| unit_size_unit      | text NOT NULL | unit of unit_size, validated client-side against js/units.js |
+| base_unit           | text NOT NULL | base unit of unit_size_unit's dimension: L,kg,piece,pack |
+| total_base_quantity | numeric NOT NULL | unit_count × unit_size, normalized to base_unit |
+| package_quantity    | numeric NOT NULL | legacy; kept one migration cycle as rollback net, see `docs/migrations/0008_two_level_package_model.sql` |
+| package_unit        | text NOT NULL | legacy, same note                     |
+| normalized_quantity | numeric NOT NULL | legacy, same note                  |
 | photo_url           | text        | reserved, unused               |
 | archived            | boolean NOT NULL default false |               |
 | created_by          | uuid NOT NULL | default auth.uid()           |
@@ -124,9 +128,13 @@ Remembers every household a user was ever in (for past-member attribution).
 | observed_price        | numeric NOT NULL |                         |
 | quantity_purchased    | numeric     | nullable                     |
 | calculated_unit_price | numeric NOT NULL | price per base unit      |
-| package_quantity      | numeric NOT NULL | snapshot at record time  |
-| package_unit          | text NOT NULL | snapshot                   |
+| calculated_price_per_subunit | numeric | price per sub-unit (price ÷ unit_count); backfilled = observed_price for legacy rows |
+| unit_count            | numeric NOT NULL default 1 | snapshot; `check > 0`  |
+| unit_size             | numeric NOT NULL | snapshot                        |
+| unit_size_unit        | text NOT NULL | snapshot                          |
 | base_unit             | text NOT NULL | snapshot                   |
+| package_quantity      | numeric NOT NULL | legacy snapshot, kept one cycle |
+| package_unit          | text NOT NULL | legacy snapshot, kept one cycle |
 | observation_date      | date NOT NULL default current_date |         |
 | source                | text NOT NULL default 'price_update' | 'price_update'|'cart_purchase' |
 | notes                 | text        |                              |

@@ -16,6 +16,9 @@
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* Class rules like .field/.icon-btn set `display`, which beats the browser's
+   own [hidden] rule — without this, the `hidden` attribute does nothing. */
+[hidden] { display: none !important; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg); color: var(--text);
@@ -139,6 +142,7 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
 }
 .field select:focus { outline: none; border-color: var(--primary); }
 .hint { font-size: 13px; color: var(--text-muted); margin: -6px 0 14px; }
+.pack-toggle { display: block; margin: -8px 0 18px; }
 .modal-scroll { max-height: 88vh; overflow-y: auto; }
 
 .app-bar-title { flex: 1; }

@@ -4,6 +4,7 @@ import { scanBarcode } from './scanner.js';
 import { showProductDetail } from './product_detail.js';
 import { openProductForm } from './product_form.js';
 import { confirmDialog } from './dialog.js';
+import { formatPackage } from './units.js';
 import { pushScreen, goBack } from './nav.js';
 
 const BOX_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -14,12 +15,6 @@ const BOX_ICON = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" st
 export function showProductsScreen(onExit) {
   pushScreen(onExit);
   paintProductsScreen(onExit, false, '');
-}
-
-function formatSize(p) {
-  const q = Number(p.package_quantity), u = p.package_unit;
-  if (['ml', 'L', 'g', 'kg'].includes(u)) return `${q}${u}`;
-  return `${q} ${u}${q === 1 ? '' : 's'}`;
 }
 
 // Repaints the whole screen for the given (includeArchived, query) state.
@@ -90,7 +85,7 @@ async function paintProductsScreen(onExit, includeArchived, initialQuery) {
       listEl.innerHTML = toggle + `<ul class="list">${shown.map(p => `
         <li class="list-item ${p.archived ? 'is-archived' : ''}">
           <button class="list-item-main list-item-open" data-open="${p.id}">
-            <div class="list-item-title">${escape(p.name)} ${escape(formatSize(p))}${p.archived ? ' <span class="tag">Archived</span>' : ''}</div>
+            <div class="list-item-title">${escape(p.name)} ${escape(formatPackage(p))}${p.archived ? ' <span class="tag">Archived</span>' : ''}</div>
             <div class="list-item-sub">${[p.brand, p.category].filter(Boolean).map(escape).join(' · ') || 'No brand'}</div>
           </button>
           <div class="list-item-actions">

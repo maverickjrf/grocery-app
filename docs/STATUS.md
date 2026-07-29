@@ -43,9 +43,13 @@ not achievable on Samsung Internet; reverted via `git revert` (`915f842`,
 no further action needed there.
 
 ## Waiting on
-Nothing.
+Nothing. Package-model feature is on hold for a while by choice, not blocked.
 
 ## Next up
-Resume Milestone A (dashboard) per `docs/ROADMAP.md`. Revisit the
-price-recording-form UX friction noted above once there's been more time
-using the multi-unit feature.
+Per `docs/ROADMAP.md`, one spec at a time, each planned and approved before
+any code: **Spec 6 (offline support)** first, then **Spec 5 (sales, regular
+prices, multi-buy promos)**, then **Milestone A (dashboard)**. Full spec text
+for 5 and 6 is in `docs/ROADMAP.md` → "Next up" so nothing gets lost between
+sessions. Also revisit the price-recording-form UX friction noted above once
+there's been more time using the multi-unit feature — natural to fold into
+the Spec 5 form work, since that spec touches the same form.

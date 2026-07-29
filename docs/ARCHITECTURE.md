@@ -52,10 +52,11 @@ from each other (cross-household data sharing was considered and rejected).
 
 ### Append-only observations with integrity snapshots
 Price observations are never overwritten (edits allowed, deletes are soft by
-default). Each observation snapshots `package_quantity`/`package_unit`/`base_unit`
-at record time so historical unit prices stay correct even if the product is
-later edited. Each observation also snapshots `recorded_by_name` so attribution
-survives the recorder leaving the household or deleting their account.
+default). Each observation snapshots `unit_count`/`unit_size`/`unit_size_unit`/
+`base_unit` at record time (see "Two-level package model" below) so historical
+unit prices stay correct even if the product is later edited. Each observation
+also snapshots `recorded_by_name` so attribution survives the recorder leaving
+the household or deleting their account.
 
 ### Client-generated UUIDs
 Observations get their `id` from `crypto.randomUUID()` on the device, so a record

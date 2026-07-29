@@ -6,11 +6,11 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-Branch: `main`, tree clean. **Two-level package model (count × unit-size)**
-is tested and committed (`cb11c61`), **not yet pushed**. Lets a product
-describe packages as a count of same-size sub-units (100 softgels of 300mg;
-10 sachets of 80g) while keeping simple single-quantity products (1.5L Coke)
-just as easy to enter.
+Branch: `main`, tree clean, everything pushed and live on GitHub Pages.
+**Two-level package model (count × unit-size)** (`cb11c61`) is tested,
+committed, and deployed. Lets a product describe packages as a count of
+same-size sub-units (100 softgels of 300mg; 10 sachets of 80g) while keeping
+simple single-quantity products (1.5L Coke) just as easy to enter.
 - `docs/migrations/0008_two_level_package_model.sql` — adds `unit_count`/
   `unit_size`/`unit_size_unit`/`total_base_quantity` to `products`, matching
   snapshot + `calculated_price_per_subunit` to `observations`. Run in Supabase
@@ -32,9 +32,6 @@ complicated now — likely the "Quantity bought" field sitting next to the new
 per-package unit-price hint line. Human said to let it sit ("nanibago" — not
 used to it yet) and revisit later rather than redesign now.
 
-**Next action for the human:** `git push` when ready — nothing has gone to
-GitHub Pages yet.
-
 ---
 
 Prior to this: the three "real-world usage fixes" (search preservation,
@@ -46,9 +43,9 @@ not achievable on Samsung Internet; reverted via `git revert` (`915f842`,
 no further action needed there.
 
 ## Waiting on
-The human: `git push` the package-model commit when ready to deploy.
+Nothing.
 
 ## Next up
-After pushing: resume Milestone A (dashboard) per `docs/ROADMAP.md`. Revisit
-the price-recording-form UX friction noted above once there's been more time
+Resume Milestone A (dashboard) per `docs/ROADMAP.md`. Revisit the
+price-recording-form UX friction noted above once there's been more time
 using the multi-unit feature.

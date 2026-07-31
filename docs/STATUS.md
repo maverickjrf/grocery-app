@@ -6,9 +6,15 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-**UNCOMMITTED, pending human test — Spec 6 Merge A: service worker + app
-shell.** Makes the app *load* without a network. No schema change, no
-migration. Nothing else is in flight.
+**DEPLOYED BUT NOT YET VERIFIED — Spec 6 Merge A: service worker + app
+shell** (`fb25c7d`). Makes the app *load* without a network. No schema
+change, no migration. Nothing else is in flight.
+
+Pushed before testing by explicit request: service workers only run over
+HTTPS, so the live GitHub Pages URL is the only place this can be tested —
+same situation as `d739db9`. A knowing exception to the test-before-commit
+rule, not a lapse. **If it misbehaves, `git revert` (never force-push) and
+tell anyone affected to open `?sw=off`.**
 
 New: `sw.js` (repo root, so its scope is `/grocery-app/`) and
 `js/sw_register.js`. Touched: `js/app.js` (one non-awaited call),

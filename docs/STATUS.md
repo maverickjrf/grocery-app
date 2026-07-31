@@ -6,29 +6,66 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-Branch: `main`, uncommitted change pending human test:
-**Barcode matching fix** (`js/products.js` → `findByBarcode`). Real-world
-testing found that a rack/shelf scan can decode as UPC-A (12 digits) while
-the product's stored barcode is EAN-13 (13 digits, leading `0`) or vice
-versa — same code, different form — causing `findByBarcode` to miss and
-treat a known product as new. Fix matches both the 12- and 13-digit form of
-the scanned code, no schema change, no migration needed. **Needs a manual
-test before commit**: scan a product whose stored barcode is 12 digits with
-a scan that would decode as 13 (or vice versa) and confirm it's found
-instead of offered as "new barcode."
+**DEPLOYED BUT NOT YET VERIFIED — stuck-modal fix** (`js/nav.js`,
+`js/dialog.js`, `js/scanner.js`). No schema change, no migration.
 
-Also noted from real-world testing: adding a new product occasionally
-freezes on "Saving…" (row is actually created server-side — confirmed by
-reloading — but the client never gets the response back, so the button
-never un-sticks). Root cause is a Supabase call with no timeout, most
-likely triggered by a connectivity blip. Decided **not** to patch this
-standalone — it's the same class of problem **Spec 6 (offline support)**
-already exists to solve (outbox, optimistic UI, retry), so fold it into
-that spec's scope rather than fixing it twice.
+Pushed deliberately *before* testing, by explicit request: the fix touches
+the barcode scanner and camera release, which can only be exercised over
+HTTPS on a real phone, so the live GitHub Pages URL is the only way to test
+it. This is a knowing exception to the normal "test before commit" rule, not
+a lapse. **If the Back button or modals misbehave, revert first and
+diagnose after** — `git revert` (not force-push), as with `915f842` /
+`0acb73a`. The manual test checklist is in "Waiting on" below.
+
+Real-world symptom: adding a product froze with the button stuck reading
+"Saving…", yet the product *was* saved (visible after restarting the
+browser). First diagnosed as a connectivity blip; the human pushed back
+that the connection was stable, and re-tracing the **success** path found
+the actual defect.
+
+`render()` only replaces `#app`, but modal overlays live on `document.body`
+— so the *only* thing that removed a modal was the `popstate` listener in
+`nav.js`. On success `product_form.js` called `dismiss()`, which called
+`goBack()`, which **silently no-ops when the nav stack is empty**, and
+`history.back()` fires no popstate when the stack has desynced from real
+browser history. In that case the overlay was never removed, `closed` was
+already `true` so further `dismiss()` calls were permanent no-ops, and the
+button text was never restored (only the `catch` branch does that). Hence:
+save succeeds, modal stranded forever. Needs no network fault at all.
+
+Fix (in `modalController`, so every modal benefits):
+- `dismiss()` now removes the overlay **itself** instead of waiting for
+  popstate — the visible UI no longer depends on a traversal landing.
+- New `onClosed` callback runs exactly once on every close path, with a
+  `BACK_LANDED_TIMEOUT_MS` (500ms) safety net so a caller is never left
+  awaiting a promise popstate was supposed to settle.
+- `dialog.js` and `scanner.js` converted from raw `pushModal`+`goBack` onto
+  `modalController` — they had the same latent bug (a dialog whose promise
+  never resolves; a camera never released).
+- History semantics deliberately **untouched** — the stack is never
+  force-popped, so Back behaves exactly as before. This matters: Back has
+  already been reverted twice here (`915f842`, `0acb73a`).
+
+Not attributable to Spec 4 despite the timing — the nav machinery predates
+it (`06f724a`) and Spec 4 added no `pushScreen`/`pushModal` calls. Most
+likely desync source is the scan→form path: `scanBarcode()` resolves from
+*inside* the popstate handler, and `scanAndRoute` then pushes a new history
+entry in the very next microtask.
+
+Known tradeoff to watch when testing: the 500ms net means a chained
+`dismiss(next)` (only used in `js/shopping.js`) could, if popstate were ever
+slower than 500ms, open the next modal before the traversal lands and have
+it immediately popped. Same-document popstate is normally a few ms, so this
+should not be reachable — but shopping-mode chaining is worth testing.
+
+Prior to this, committed and live: **barcode UPC-A/EAN-13 matching fix**
+(`f8d9258`) — a scan can decode as 12-digit UPC-A while the stored barcode
+is 13-digit EAN-13 (leading `0`) or vice versa; `findByBarcode` now matches
+both forms so a known product isn't offered as new.
 
 ---
 
-Prior to this: **Two-level package model (count × unit-size)** (`cb11c61`) is tested,
+Prior to that: **Two-level package model (count × unit-size)** (`cb11c61`) is tested,
 committed, and deployed. Lets a product describe packages as a count of
 same-size sub-units (100 softgels of 300mg; 10 sachets of 80g) while keeping
 simple single-quantity products (1.5L Coke) just as easy to enter.
@@ -64,7 +101,23 @@ not achievable on Samsung Internet; reverted via `git revert` (`915f842`,
 no further action needed there.
 
 ## Waiting on
-Nothing. Package-model feature is on hold for a while by choice, not blocked.
+**Human to test the stuck-modal fix on a phone, against the live URL.**
+Nothing else is blocked. Checklist:
+1. **The bug itself** — Products → **+** → fill in → **Add**: modal closes
+   immediately, product appears. Repeat via the **scan** icon (scan → form →
+   Add), the most likely desync path.
+2. **Back button, every path** (the regression risk) — modal + hardware Back
+   closes it without exiting the app; Products → detail → Back preserves
+   search text and archived toggle; open a modal, **Cancel**, then Back →
+   goes up one level, not two.
+3. **Dialogs** — delete a product with no prices ("Delete forever") and one
+   with prices ("Archive"); confirm, cancel, and dismiss one with hardware
+   Back (should act as Cancel). Nothing hangs.
+4. **Camera release** — scan, cancel a scan, hardware-Back out of a scan.
+   After each, the camera indicator goes off and the scanner reopens fine.
+5. **Shopping-mode chaining** (the 500ms tradeoff) — from the found panel,
+   "Add product" and "Scan next": the next modal opens and *stays* open.
+6. **Two accounts, one household** — add a product on A, confirm on B.
 
 ## Next up
 Per `docs/ROADMAP.md`, one spec at a time, each planned and approved before

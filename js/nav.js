@@ -25,22 +25,52 @@ export function goBack() {
   history.back();
 }
 
+// How long to wait for a history.back() to actually land before assuming it
+// never will. Only ever reached when the nav stack and the browser's real
+// history have desynced; a normal traversal fires popstate immediately.
+const BACK_LANDED_TIMEOUT_MS = 500;
+
 // Helper for the common modal shape: open once, close once, optionally chain
 // into another screen/modal once the close has actually completed (so a new
 // push never races an in-flight history.back()).
-export function modalController(overlay) {
-  let closed = false;
+//
+// `onClosed` runs exactly once however the modal was closed — a button, the
+// backdrop, or hardware/browser Back — which is where a dialog resolves its
+// promise or a scanner releases the camera.
+//
+// Two guarantees matter here, both learned the hard way:
+//  - The overlay is removed by dismiss() itself, never left to popstate. If the
+//    stack has desynced, history.back() can no-op and popstate never arrives —
+//    which used to strand the modal on screen with a completed save still
+//    reading "Saving…", recoverable only by restarting the browser.
+//  - onClosed/afterClose still run even if that traversal never lands, so no
+//    caller is left awaiting a promise that popstate was supposed to settle.
+// History itself is untouched: we never force-pop the stack, so Back behaves
+// exactly as before.
+export function modalController(overlay, onClosed = null) {
+  let closed = false;  // overlay torn down
+  let settled = false; // onClosed / afterClose have run
   let afterClose = null;
-  pushModal(() => {
+
+  const settle = () => {
+    if (settled) return;
+    settled = true;
     closed = true;
-    overlay.remove();
+    overlay.remove(); // no-op if dismiss() already removed it
+    if (onClosed) onClosed();
     if (afterClose) afterClose();
-  });
+  };
+
+  pushModal(settle);
+
   return (next) => {
     if (closed) return; // already closed (e.g. hardware Back beat a slow save to the punch)
     closed = true;
     afterClose = next || null;
+    overlay.remove();
+    if (!stack.length) { settle(); return; } // nothing to traverse — settle now
     goBack();
+    setTimeout(settle, BACK_LANDED_TIMEOUT_MS);
   };
 }
 

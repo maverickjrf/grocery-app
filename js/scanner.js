@@ -1,6 +1,6 @@
 import { BrowserMultiFormatReader } from 'https://esm.sh/@zxing/browser@0.1.5';
 import { DecodeHintType, BarcodeFormat } from 'https://esm.sh/@zxing/library@0.21.3';
-import { pushModal, goBack } from './nav.js';
+import { modalController } from './nav.js';
 
 // Focus on the barcode types found on groceries (plus QR). Restricting the list
 // makes 1D retail barcodes decode faster and more reliably than trying everything.
@@ -36,11 +36,11 @@ export function scanBarcode() {
     let resultValue = null;
 
     // The only place this overlay actually closes — cancel, a successful
-    // scan, or hardware/browser Back all funnel here via finish()/goBack().
-    pushModal(() => {
+    // scan, or hardware/browser Back all funnel here via finish()/dismiss().
+    // Releasing the camera lives here so it happens on every close path.
+    const dismiss = modalController(overlay, () => {
       done = true;
       try { controls && controls.stop(); } catch { /* already stopped */ }
-      overlay.remove();
       resolve(resultValue);
     });
 
@@ -48,7 +48,7 @@ export function scanBarcode() {
       if (done) return;
       done = true;
       resultValue = value;
-      goBack();
+      dismiss();
     };
 
     cancelBtn.onclick = () => finish(null);

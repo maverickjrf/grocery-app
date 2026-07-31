@@ -6,15 +6,22 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-**DEPLOYED BUT NOT YET VERIFIED — Spec 6 Merge A: service worker + app
-shell** (`fb25c7d`). Makes the app *load* without a network. No schema
-change, no migration. Nothing else is in flight.
+Branch: `main`, tree clean, everything pushed and live.
+**Spec 6 Merge A (service worker + app shell)** (`fb25c7d`) is tested and
+confirmed working. The app now loads without a network. No schema change,
+no migration.
 
-Pushed before testing by explicit request: service workers only run over
-HTTPS, so the live GitHub Pages URL is the only place this can be tested —
-same situation as `d739db9`. A knowing exception to the test-before-commit
-rule, not a lapse. **If it misbehaves, `git revert` (never force-push) and
-tell anyone affected to open `?sw=off`.**
+Verified on the human's device: normal online use unaffected (which also
+clears the Supabase version pin); airplane-mode cold open renders the app
+instead of the browser's offline page; offline data screens error rather
+than showing stale prices (confirming Supabase responses are never cached);
+DevTools shows the worker activated with `shell-v1` / `cdn-v1` populated.
+
+Still unverified, neither blocking:
+- **The "new version is ready" prompt** — needs a deploy *after* the worker
+  was installed, so the next push is its first real test. Watch for it.
+- **`?sw=off` kill switch** — untested. Worth trying once so it's known to
+  work *before* it's ever needed.
 
 New: `sw.js` (repo root, so its scope is `/grocery-app/`) and
 `js/sw_register.js`. Touched: `js/app.js` (one non-awaited call),
@@ -97,30 +104,7 @@ not achievable on Samsung Internet; reverted via `git revert` (`915f842`,
 no further action needed there.
 
 ## Waiting on
-**Human to test Spec 6 Merge A.** Service workers need HTTPS, so this must be
-tested against the live URL on a phone — i.e. it has to be pushed before it
-can be fully tested, same situation as `d739db9`. Checklist:
-
-1. **Nothing regressed online** (do this first) — hard-refresh, sign in, load
-   products/stores, record a price, scan a barcode. Everything as before. This
-   also covers the Supabase version pin.
-2. **Worker installed** — DevTools → Application → Service Workers shows
-   `sw.js` activated; Cache Storage has `shell-v1` (and `cdn-v1` after a scan).
-3. **The point of the exercise** — load the app online once, then turn on
-   airplane mode and open it again. It must render (sign-in or home) rather
-   than the browser's dinosaur. Data screens erroring offline is *expected* in
-   Merge A.
-4. **Supabase never cached** — offline, a data screen must show an error, not
-   stale prices.
-5. **Update prompt** — after the *next* deploy, an already-open app should
-   show "A new version is ready"; Reload picks up the new code. (Only
-   testable on a later push.)
-6. **Kill switch** — open `.../grocery-app/?sw=off`, confirm in DevTools the
-   worker is gone and caches are cleared, and the app still works.
-7. **Two accounts, one household** — unchanged sharing behaviour.
-
-Revert route if it misbehaves: `git revert` (never force-push), then have
-anyone affected open `?sw=off`.
+Nothing. Ready to plan **Spec 6 Merge B** (local data layer + sync).
 
 ## Next up
 Per `docs/ROADMAP.md`, one spec at a time, each planned and approved before

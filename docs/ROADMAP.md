@@ -20,6 +20,17 @@ Present the plan for approval before implementing, and land it in two
 merges: (A) service worker + app shell, verified working, then (B) local
 data layer + sync.
 
+> **Merge A is shipped and verified** (`fb25c7d`). The "1. Service worker"
+> section below is kept for context but is **superseded on two points** by
+> what was actually built — CDN modules are runtime-cached rather than
+> precached (esm.sh returns a re-exporting shim, so precaching the entry URL
+> leaves a broken graph offline), and freshness comes from background
+> revalidation rather than a hand-bumped `CACHE_VERSION` (nothing is
+> content-hashed without a build step, so a forgotten bump would pin users to
+> stale JS permanently). See `docs/ARCHITECTURE.md` → "Offline: app shell"
+> for the as-built design. **Everything from section 2 onward is still to
+> build — that is Merge B.**
+
 Note: the "stuck on Saving…" bug first blamed on connectivity turned out to
 be a nav/modal-teardown defect, fixed separately — see `docs/STATUS.md`. It
 is **not** evidence for this spec. The genuine requirement stands on its own

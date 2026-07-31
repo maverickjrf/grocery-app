@@ -17,9 +17,16 @@ export const productRepository = {
   },
 
   async findByBarcode(barcode) {
+    const code = (barcode || '').trim();
+    // UPC-A (12 digits) and EAN-13 (13 digits, leading 0) are the same code —
+    // a scan can come back in either form depending on the scanner/label, so
+    // match against both rather than requiring an exact stored form.
+    const variants = [code];
+    if (code.length === 13 && code.startsWith('0')) variants.push(code.slice(1));
+    else if (code.length === 12) variants.push('0' + code);
     const { data, error } = await supabase.from('products')
       .select(PRODUCT_FIELDS)
-      .eq('barcode', barcode).limit(1);
+      .in('barcode', variants).limit(1);
     if (error) throw error;
     return data[0] || null;
   },

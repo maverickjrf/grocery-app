@@ -6,8 +6,29 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-Branch: `main`, tree clean, everything pushed and live on GitHub Pages.
-**Two-level package model (count × unit-size)** (`cb11c61`) is tested,
+Branch: `main`, uncommitted change pending human test:
+**Barcode matching fix** (`js/products.js` → `findByBarcode`). Real-world
+testing found that a rack/shelf scan can decode as UPC-A (12 digits) while
+the product's stored barcode is EAN-13 (13 digits, leading `0`) or vice
+versa — same code, different form — causing `findByBarcode` to miss and
+treat a known product as new. Fix matches both the 12- and 13-digit form of
+the scanned code, no schema change, no migration needed. **Needs a manual
+test before commit**: scan a product whose stored barcode is 12 digits with
+a scan that would decode as 13 (or vice versa) and confirm it's found
+instead of offered as "new barcode."
+
+Also noted from real-world testing: adding a new product occasionally
+freezes on "Saving…" (row is actually created server-side — confirmed by
+reloading — but the client never gets the response back, so the button
+never un-sticks). Root cause is a Supabase call with no timeout, most
+likely triggered by a connectivity blip. Decided **not** to patch this
+standalone — it's the same class of problem **Spec 6 (offline support)**
+already exists to solve (outbox, optimistic UI, retry), so fold it into
+that spec's scope rather than fixing it twice.
+
+---
+
+Prior to this: **Two-level package model (count × unit-size)** (`cb11c61`) is tested,
 committed, and deployed. Lets a product describe packages as a count of
 same-size sub-units (100 softgels of 300mg; 10 sachets of 80g) while keeping
 simple single-quantity products (1.5L Coke) just as easy to enter.

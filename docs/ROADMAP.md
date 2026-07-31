@@ -20,6 +20,13 @@ Present the plan for approval before implementing, and land it in two
 merges: (A) service worker + app shell, verified working, then (B) local
 data layer + sync.
 
+Real-world case this must cover: adding a product once froze on "Saving…"
+indefinitely — the row was created server-side (confirmed on reload) but a
+connectivity blip meant the client never got the response, and the
+no-timeout Supabase call just hung forever. Whatever this spec builds
+(outbox + optimistic writes) must guarantee a mutating action never leaves
+the UI stuck waiting on a response that may never come, online or offline.
+
 **Architecture**
 
 Five new pieces, all behind the existing repository layer so screens change

@@ -3,10 +3,14 @@
 ## Status
 MVP complete and in real-world use. Real-world usage fixes (search
 preservation, new units, Back-button/nav-stack) and Spec 4 (two-level package
-model) are done, confirmed, and live. Next up, in this order: Spec 6
-(offline support), then Spec 5 (sales/promos), then Milestone A (dashboard).
-One spec at a time, each presented as a plan for approval before any code is
-written.
+model) are done, confirmed, and live.
+
+**Spec 6 (offline) is half done and live:** Merge A (app shell) and Merge B1
+(offline reads) are deployed and tested. **Merge B2 (offline writes) is what
+remains** — see `docs/STATUS.md` for the sharp edges found while building B1
+that B2 has to handle. After that: Spec 5 (sales/promos), then Milestone A
+(dashboard). One spec at a time, each presented as a plan for approval before
+any code is written.
 
 ## Next up
 
@@ -350,6 +354,20 @@ this spec; just don't design anything that makes that exclusion hard.
   small canvas/SVG lib preferred over a heavy framework given no build step).
 
 ## Recently completed
+- **Spec 6 Merge B1 — Offline reads**, `0ad7324` (+ fixes `47c0082`,
+  `738dd6b`, `17d2b07`). IndexedDB copy of products, stores and price
+  history; reads fall back to it when the network fails; offline indicator;
+  fixed a lockout where losing signal dropped the user on the login screen.
+  See `docs/ARCHITECTURE.md` → "Offline: local data".
+- **Spec 6 Merge A — Service worker + app shell**, `fb25c7d`. The app loads
+  without a network. See `docs/ARCHITECTURE.md` → "Offline: app shell".
+- **Stuck-modal fix**, `d739db9`. `dismiss()` removes a modal overlay itself
+  rather than waiting for a `popstate` that may never arrive, which could
+  strand a completed save reading "Saving…". `dialog.js`/`scanner.js` moved
+  onto `modalController`.
+- **Barcode UPC-A/EAN-13 matching**, `f8d9258`. A scan can decode as
+  12-digit UPC-A while the stored barcode is 13-digit EAN-13 (leading `0`);
+  `findByBarcode` now matches both forms.
 - **Spec 4 — Two-level package model (count × unit-size)**, `cb11c61` /
   `docs/migrations/0008_two_level_package_model.sql`. A product's package is
   a count of same-size sub-units (100 softgels of 300mg; 10 sachets of 80g);

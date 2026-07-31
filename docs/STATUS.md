@@ -6,9 +6,16 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-**UNCOMMITTED, pending human test — Spec 6 Merge B1: offline reads.**
-Products, stores and price history now come from a saved local copy when the
-network is gone. **No schema change, no migration** — code only.
+**DEPLOYED BUT NOT YET VERIFIED — Spec 6 Merge B1: offline reads**
+(`0ad7324`). Products, stores and price history now come from a saved local
+copy when the network is gone. **No schema change, no migration** — code
+only.
+
+Pushed before testing, as this repo's offline work always must be: service
+workers and airplane-mode behaviour only exist over HTTPS on a real device.
+**If it misbehaves, `git revert` (never force-push)**; `?sw=off` clears the
+service worker but *not* IndexedDB — for that, sign out (which wipes it) or
+clear site data.
 
 New: `js/local_db.js` (IndexedDB + the `readThrough` helper),
 `js/connectivity.js` (offline state + bar). Modified: `js/products.js`,

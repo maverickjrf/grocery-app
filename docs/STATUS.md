@@ -6,10 +6,38 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-**DEPLOYED BUT NOT YET VERIFIED — Spec 6 Merge B1: offline reads**
-(`0ad7324`). Products, stores and price history now come from a saved local
-copy when the network is gone. **No schema change, no migration** — code
-only.
+**DEPLOYED, AWAITING RE-TEST — Spec 6 Merge B1 + four fixes from the first
+round of mobile testing.** Products, stores and price history come from a
+saved local copy when the network is gone. **No schema change, no
+migration** — code only.
+
+B1 first shipped as `0ad7324`; mobile testing found four bugs, all now
+fixed:
+1. **Offline refresh landed on "create a household".** `getMyHousehold()`
+   used `supabase.auth.getUser()`, which is a *network* call that validates
+   the token server-side. Offline it returns `{ user: null }` **without
+   throwing**, so the network-error branch never ran and `null` read as "no
+   household". Now uses `getSession()`, which reads the locally persisted
+   session. (This was one of the two things flagged as reasoned-not-proven
+   — the reasoning was right about `getSession`, but the code was calling
+   `getUser`.)
+2. **Update banner needed two reloads.** Both a changed file and a waiting
+   worker raise it, but the file-change message carries no registration, so
+   if it won the race the Reload button did a plain reload and left the new
+   worker waiting — banner straight back. Reload now looks the registration
+   up at click time.
+3. **Offline scan / record price showed "TypeError: failed to fetch".**
+   Writes had no offline handling at all. New `requireNetwork()` wrapper
+   gives every write the same 8s timeout as reads and a readable message.
+   `readThrough` no longer rethrows a raw fetch error when the cache is
+   empty either.
+4. **Offline scan found nothing** even for known products: the product cache
+   is only filled by a read, and scanning is reachable from Home without
+   ever opening the Products list. Home now warms it in the background.
+
+Note fix 3 also puts a timeout on every write — which is the underlying
+"stuck on Saving…" hazard from earlier in the project, now closed for real
+rather than deferred to B2.
 
 Pushed before testing, as this repo's offline work always must be: service
 workers and airplane-mode behaviour only exist over HTTPS on a real device.
@@ -46,12 +74,12 @@ product, or editing anything still needs a connection and will error offline.
 That is Merge B2. `local_db.js` creates an empty `outbox` store now so B2
 doesn't need an IndexedDB version bump.
 
-Two things to verify empirically, flagged during the build:
-- Whether `supabase.auth.getSession()` reliably answers offline with an
-  expired token. It reads localStorage and should, but this was not proven.
-- Whether an RLS denial still surfaces as a real error rather than being
-  masked by cached data (`isNetworkError` treats anything with a Postgres
-  error code as a genuine refusal).
+Still unproven: whether an RLS denial surfaces as a real error rather than
+being masked by cached data. `isNetworkError` treats anything carrying a
+Postgres error code as a genuine refusal, and a network failure from
+supabase-js arrives as `{ message: 'TypeError: Failed to fetch', code: '' }`
+— an empty-string code, which is falsy, so it correctly falls through to the
+message test. Reasoned, not tested; hard to trigger deliberately.
 
 Prior to this, tested and live: **Spec 6 Merge A (service worker + app
 shell)** (`fb25c7d`) — the app loads without a network.
@@ -151,25 +179,25 @@ not achievable on Samsung Internet; reverted via `git revert` (`915f842`,
 no further action needed there.
 
 ## Waiting on
-**Human to test Spec 6 Merge B1.** Needs HTTPS (service worker) and airplane
-mode, so it has to be pushed to be tested — same as `fb25c7d`. Checklist:
+**Human to re-test Merge B1 on mobile.** Needs HTTPS and airplane mode, so it
+must be pushed to be tested. **Reload twice first** to get past the old
+cached worker, then:
 
-1. **Nothing regressed online** (first) — sign in, products, stores, product
-   detail with history, scan, record a price, add/edit/archive a product and
-   a store. All exactly as before, and **no "Offline" bar**.
-2. **The lockout fix** — with the app loaded once online, go airplane mode
-   and cold-open the app. It must reach Home, *not* the login screen.
-3. **Offline reads** — airplane mode: products list, stores list, and a
-   product's price history + "Where to buy" all show saved data, with the
-   "Offline — showing saved data" bar visible.
-4. **Offline scan** — scanning a known barcode offline still finds the
-   product.
-5. **Bar clears** — turn the network back on, reload: the bar disappears.
-6. **Writes still fail cleanly offline** (expected in B1) — recording a price
-   offline should show a friendly error, not hang and not silently fail.
-7. **Sign-out clears the cache** — sign out, then DevTools → Application →
-   IndexedDB → `grocery-local`: every store should be empty. This is the
-   privacy check; it matters most.
+1. **Update banner** — should now clear after **one** Reload, not two.
+2. **Offline refresh reaches Home** — airplane mode, refresh: Home, *not*
+   the create-household screen and *not* login. (Bug 1 above.)
+3. **Offline scan finds a known product.** Visit Home online once first so
+   the cache warms.
+4. **Offline write shows a readable message** — record a price offline: it
+   must say something like "You're offline. This needs a connection", never
+   "TypeError: failed to fetch", and must not hang.
+5. **Nothing regressed online** — full pass, and **no "Offline" bar** while
+   connected. If the bar appears with signal, `isNetworkError` is too
+   aggressive.
+6. **Offline reads** — products, stores, history, "Where to buy" all show
+   saved data with the bar visible.
+7. **Sign-out clears the cache** — DevTools → Application → IndexedDB →
+   `grocery-local` must be empty. The privacy check; matters most.
 8. **Two accounts, one household** — unchanged sharing.
 
 ## Next up

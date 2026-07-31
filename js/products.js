@@ -1,6 +1,6 @@
 import { supabase } from './config.js';
 import { baseUnitFor, normalizeQuantity, totalBaseQuantity } from './units.js';
-import { readThrough, replaceAll, getAll, STORES } from './local_db.js';
+import { readThrough, requireNetwork, replaceAll, getAll, STORES } from './local_db.js';
 
 const PRODUCT_FIELDS =
   'id, name, brand, category, barcode, unit_count, unit_size, unit_size_unit, base_unit, total_base_quantity';
@@ -60,40 +60,50 @@ export const productRepository = {
   },
 
   async createProduct(p) {
-    const { data, error } = await supabase.from('products')
-      .insert(await this._toRow(p))
-      .select(PRODUCT_FIELDS)
-      .single();
-    if (error) throw error;
-    return data;
+    return requireNetwork(async () => {
+      const { data, error } = await supabase.from('products')
+        .insert(await this._toRow(p))
+        .select(PRODUCT_FIELDS)
+        .single();
+      if (error) throw error;
+      return data;
+    });
   },
 
   async updateProduct(id, p) {
-    const { data, error } = await supabase.from('products')
-      .update(await this._toRow(p)).eq('id', id)
-      .select(PRODUCT_FIELDS)
-      .single();
-    if (error) throw error;
-    return data;
+    return requireNetwork(async () => {
+      const { data, error } = await supabase.from('products')
+        .update(await this._toRow(p)).eq('id', id)
+        .select(PRODUCT_FIELDS)
+        .single();
+      if (error) throw error;
+      return data;
+    });
   },
 
   async setArchived(id, archived) {
-    const { error } = await supabase.from('products').update({ archived }).eq('id', id);
-    if (error) throw error;
+    return requireNetwork(async () => {
+      const { error } = await supabase.from('products').update({ archived }).eq('id', id);
+      if (error) throw error;
+    });
   },
 
   async deleteProduct(id) {
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) throw error;
+    return requireNetwork(async () => {
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) throw error;
+    });
   },
 
   // Counts ALL price rows (even hidden ones) — used to decide archive vs. permanent delete
   async countAllObservations(productId) {
-    const { count, error } = await supabase.from('observations')
-      .select('id', { count: 'exact', head: true })
-      .eq('product_id', productId);
-    if (error) throw error;
-    return count || 0;
+    return requireNetwork(async () => {
+      const { count, error } = await supabase.from('observations')
+        .select('id', { count: 'exact', head: true })
+        .eq('product_id', productId);
+      if (error) throw error;
+      return count || 0;
+    });
   },
 
   async _toRow(p) {

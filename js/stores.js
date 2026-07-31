@@ -1,5 +1,5 @@
 import { supabase } from './config.js';
-import { readThrough, replaceAll, getAll, STORES } from './local_db.js';
+import { readThrough, requireNetwork, replaceAll, getAll, STORES } from './local_db.js';
 
 export const storeRepository = {
   // Fetches every store, archived included, and filters locally — same reason
@@ -20,18 +20,24 @@ export const storeRepository = {
     return [...visible].sort((a, b) => a.name.localeCompare(b.name));
   },
   async createStore(name, location) {
-    const { error } = await supabase.from('stores')
-      .insert({ name: name.trim(), location: (location || '').trim() || null });
-    if (error) throw error;
+    return requireNetwork(async () => {
+      const { error } = await supabase.from('stores')
+        .insert({ name: name.trim(), location: (location || '').trim() || null });
+      if (error) throw error;
+    });
   },
   async updateStore(id, { name, location }) {
-    const { error } = await supabase.from('stores')
-      .update({ name: name.trim(), location: (location || '').trim() || null })
-      .eq('id', id);
-    if (error) throw error;
+    return requireNetwork(async () => {
+      const { error } = await supabase.from('stores')
+        .update({ name: name.trim(), location: (location || '').trim() || null })
+        .eq('id', id);
+      if (error) throw error;
+    });
   },
   async setArchived(id, archived) {
-    const { error } = await supabase.from('stores').update({ archived }).eq('id', id);
-    if (error) throw error;
+    return requireNetwork(async () => {
+      const { error } = await supabase.from('stores').update({ archived }).eq('id', id);
+      if (error) throw error;
+    });
   },
 };

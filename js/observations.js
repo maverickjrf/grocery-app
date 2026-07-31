@@ -1,6 +1,6 @@
 import { supabase } from './config.js';
 import { pricePerBase, pricePerSubunit, baseUnitFor } from './units.js';
-import { readThrough, replaceByIndex, getAllByIndex, STORES } from './local_db.js';
+import { readThrough, requireNetwork, replaceByIndex, getAllByIndex, STORES } from './local_db.js';
 
 // `product_id` and `created_at` are selected for the local copy's sake: the
 // first indexes cached history by product, the second reproduces the server's
@@ -48,32 +48,40 @@ export const observationRepository = {
       ...prices(p),
     };
     if (crypto && crypto.randomUUID) row.id = crypto.randomUUID();
-    const { error } = await supabase.from('observations').insert(row);
-    if (error) throw error;
+    return requireNetwork(async () => {
+      const { error } = await supabase.from('observations').insert(row);
+      if (error) throw error;
+    });
   },
 
   // Edit an existing entry. Recalculates both prices from its own package
   // snapshot — never from the live product row.
   async updateObservation(id, p) {
-    const { error } = await supabase.from('observations').update({
-      store_id: p.storeId,
-      observed_price: p.observedPrice,
-      quantity_purchased: p.quantityPurchased ?? null,
-      observation_date: p.observationDate,
-      notes: (p.notes || '').trim() || null,
-      ...prices(p),
-    }).eq('id', id);
-    if (error) throw error;
+    return requireNetwork(async () => {
+      const { error } = await supabase.from('observations').update({
+        store_id: p.storeId,
+        observed_price: p.observedPrice,
+        quantity_purchased: p.quantityPurchased ?? null,
+        observation_date: p.observationDate,
+        notes: (p.notes || '').trim() || null,
+        ...prices(p),
+      }).eq('id', id);
+      if (error) throw error;
+    });
   },
 
   async softDeleteObservation(id) {
-    const { error } = await supabase.from('observations').update({ is_deleted: true }).eq('id', id);
-    if (error) throw error;
+    return requireNetwork(async () => {
+      const { error } = await supabase.from('observations').update({ is_deleted: true }).eq('id', id);
+      if (error) throw error;
+    });
   },
 
   async hardDeleteObservation(id) {
-    const { error } = await supabase.from('observations').delete().eq('id', id);
-    if (error) throw error;
+    return requireNetwork(async () => {
+      const { error } = await supabase.from('observations').delete().eq('id', id);
+      if (error) throw error;
+    });
   },
 
   // Cached per product. Rows are saved exactly as the server returns them —

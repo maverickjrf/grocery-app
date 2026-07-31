@@ -172,8 +172,36 @@ export async function readThrough({ fetch: fetchFn, save, load }) {
     markOffline();
     let cached = [];
     try { cached = await load(); } catch { /* no local copy available */ }
-    if (!cached || !cached.length) throw err; // nothing saved yet — show the error
+    if (!cached || !cached.length) throw offlineError(
+      "You're offline, and this hasn't been saved on this device yet. Open it once while connected.");
     return cached;
+  }
+}
+
+// Network failures reach the UI as "TypeError: Failed to fetch", which is not
+// a sentence to show anyone. Repositories throw, the UI prints err.message —
+// so the friendly wording has to be attached here.
+function offlineError(message) {
+  const err = new Error(message);
+  err.offline = true;
+  return err;
+}
+
+// For writes, which have no offline path yet (Merge B2). Adds the same 8s
+// timeout the reads get — without it a mutating call can hang forever on a
+// connection that never answers — and turns a network failure into something
+// worth reading. "TypeError: Failed to fetch" is not a message to show
+// anyone.
+export async function requireNetwork(run) {
+  try {
+    const result = await withTimeout(run(), NETWORK_TIMEOUT_MS);
+    markOnline();
+    return result;
+  } catch (err) {
+    if (!isNetworkError(err)) throw err; // a real refusal keeps its own message
+    markOffline();
+    throw offlineError(
+      "You're offline. This needs a connection — try again once you're back online.");
   }
 }
 

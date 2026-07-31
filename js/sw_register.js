@@ -96,8 +96,20 @@ function showUpdateBanner(registration = null) {
   document.body.appendChild(banner);
 
   banner.querySelector('.sw-update-dismiss').onclick = () => banner.remove();
-  banner.querySelector('.sw-update-reload').onclick = () => {
-    const waiting = registration && registration.waiting;
+  banner.querySelector('.sw-update-reload').onclick = async () => {
+    // Look the worker up at click time rather than trusting what was known
+    // when the banner appeared. Both an updated file and a new worker can
+    // raise this banner, and the file-change message carries no registration
+    // — so if that message won the race, a plain reload would leave the new
+    // worker waiting and the banner would come straight back on the next
+    // load. That is the "had to reload twice" bug.
+    let waiting = registration && registration.waiting;
+    if (!waiting) {
+      try {
+        const current = await navigator.serviceWorker.getRegistration();
+        waiting = current && current.waiting;
+      } catch { /* fall through to a plain reload */ }
+    }
     if (!waiting) { location.reload(); return; }
     // Swap the worker first, then reload once it has taken control, so the
     // reload is served by the new version rather than racing it.

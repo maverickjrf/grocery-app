@@ -4,6 +4,7 @@ import { householdRepository } from './household.js';
 import { showStoresScreen } from './stores_screen.js';
 import { showProductsScreen } from './products_screen.js';
 import { storeRepository } from './stores.js';
+import { productRepository } from './products.js';
 import { session } from './session.js';
 import { startShoppingScan } from './shopping.js';
 import { confirmDialog } from './dialog.js';
@@ -282,6 +283,12 @@ function showHome(household) {
       alert(err.message || 'Could not leave the household.');
     }
   };
+
+  // Warm the offline copy of products. Nothing on this screen shows them, but
+  // the cache is only ever filled by a read, and scanning is the one thing
+  // people do with no signal — reaching for the scanner in a store having
+  // never opened the Products list would otherwise find nothing saved.
+  productRepository.getProducts().catch(() => { /* offline or busy; not urgent */ });
 
   (async () => {
     const sel = document.getElementById('current-store');

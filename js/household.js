@@ -14,7 +14,12 @@ export const householdRepository = {
   // read from cache below, since a stale code is worse than no code.
   async getMyHousehold() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // getSession() reads the session Supabase persists locally; getUser()
+      // calls the server to validate it. Offline, getUser() hands back
+      // { user: null } without throwing, which used to read as "no
+      // household" and drop the user on the create-household screen.
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session && session.user;
       if (!user) return null;
 
       const { data, error } = await supabase

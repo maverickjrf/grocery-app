@@ -1,4 +1,4 @@
-import { markOnline, markOffline } from './connectivity.js';
+import { markOnline, markOffline, isOffline } from './connectivity.js';
 
 // Local copy of household data, so screens still have something to show when
 // the network is gone. Raw IndexedDB — the needs here are put/getAll/clear,
@@ -127,7 +127,14 @@ export async function ensureHousehold(householdId) {
   } catch { /* no local storage available — nothing cached to leak */ }
 }
 
+// Bumped on every wipe. A read started before sign-out can still be in
+// flight when the clear finishes — the Home screen warms the product cache
+// in the background, so this is easy to hit — and saving its result would
+// quietly repopulate the store of a household nobody is signed into.
+let generation = 0;
+
 export async function forgetEverything() {
+  generation += 1;
   try { await clearAll(); } catch { /* nothing to clear */ }
 }
 
@@ -162,10 +169,23 @@ function withTimeout(promise, ms) {
 // `save` and `load` are passed in rather than assumed, because price history
 // is stored per product while products and stores are stored wholesale.
 export async function readThrough({ fetch: fetchFn, save, load }) {
+  // Already known to be offline: answer from the saved copy immediately
+  // rather than spending the whole timeout rediscovering it. Without this,
+  // every offline read sat for 8 seconds first — which is what made
+  // scanning a barcode offline feel like the app had frozen.
+  if (isOffline() || navigator.onLine === false) {
+    try {
+      const cached = await load();
+      if (cached && cached.length) return cached;
+    } catch { /* nothing saved — fall through and try the network anyway */ }
+  }
+
+  const startedAt = generation;
   try {
     const rows = await withTimeout(fetchFn(), NETWORK_TIMEOUT_MS);
     markOnline();
-    try { await save(rows); } catch { /* cache write failed; the data is still good */ }
+    // Dropped if the cache was wiped while this was in flight.
+    try { if (startedAt === generation) await save(rows); } catch { /* cache write failed; the data is still good */ }
     return rows;
   } catch (err) {
     if (!isNetworkError(err)) throw err; // a real refusal — let the UI say so

@@ -3,6 +3,19 @@ export const render = (html) => { app.innerHTML = html; };
 export const escape = (s) => String(s ?? '').replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// Feedback for the gap between an action landing and its result arriving —
+// notably a barcode scan, where the camera closes and nothing visibly
+// happens while the lookup runs. Without it people tap again, thinking the
+// scan missed. Returns its own dismiss function.
+export function showBusy(message) {
+  const el = document.createElement('div');
+  el.className = 'busy-overlay';
+  el.innerHTML = `<div class="busy-card"><span class="busy-spinner"></span>
+    <span>${escape(message)}</span></div>`;
+  document.body.appendChild(el);
+  return () => el.remove();
+}
+
 const svg = (paths) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"
   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 

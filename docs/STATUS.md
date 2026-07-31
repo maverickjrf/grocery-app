@@ -11,8 +11,32 @@ round of mobile testing.** Products, stores and price history come from a
 saved local copy when the network is gone. **No schema change, no
 migration** — code only.
 
-B1 first shipped as `0ad7324`; mobile testing found four bugs, all now
-fixed:
+Second round of mobile testing found four more, all now fixed:
+
+**A. IndexedDB was not cleared on sign-out — the privacy check failed.** Two
+causes. `signOut()` awaited `supabase.auth.signOut()` *before* wiping, so if
+that call threw (offline, or any failure) the wipe never ran. And the Home
+screen's background product-cache warm-up could still be in flight and
+re-save rows *after* the wipe finished. `signOut()` now never throws and
+always wipes, and `local_db.js` keeps a `generation` counter so a read that
+started before a wipe is dropped instead of repopulating.
+
+**B. Offline felt frozen — every offline read waited the full 8s timeout**
+before falling back to the cache. `readThrough` now answers straight from
+the saved copy when already known to be offline. Scanning offline is
+effectively instant.
+
+**C. No feedback between a scan landing and its result.** The camera closes
+immediately, so nothing visibly happened and people tap again. New
+`showBusy()` in `ui.js` shows "Barcode scanned — looking it up…" over both
+scan paths.
+
+**D. Signing in offline showed a raw error.** It genuinely cannot work — the
+password must be checked by the server, and caching credentials to fake it
+would be worse than the inconvenience. Now says so, and points out that
+staying signed in offline *does* work.
+
+Prior round, also fixed:
 1. **Offline refresh landed on "create a household".** `getMyHousehold()`
    used `supabase.auth.getUser()`, which is a *network* call that validates
    the token server-side. Offline it returns `{ user: null }` **without
@@ -180,25 +204,22 @@ no further action needed there.
 
 ## Waiting on
 **Human to re-test Merge B1 on mobile.** Needs HTTPS and airplane mode, so it
-must be pushed to be tested. **Reload twice first** to get past the old
-cached worker, then:
+must be pushed to be tested.
 
-1. **Update banner** — should now clear after **one** Reload, not two.
-2. **Offline refresh reaches Home** — airplane mode, refresh: Home, *not*
-   the create-household screen and *not* login. (Bug 1 above.)
-3. **Offline scan finds a known product.** Visit Home online once first so
-   the cache warms.
-4. **Offline write shows a readable message** — record a price offline: it
-   must say something like "You're offline. This needs a connection", never
-   "TypeError: failed to fetch", and must not hang.
-5. **Nothing regressed online** — full pass, and **no "Offline" bar** while
-   connected. If the bar appears with signal, `isNetworkError` is too
-   aggressive.
-6. **Offline reads** — products, stores, history, "Where to buy" all show
-   saved data with the bar visible.
-7. **Sign-out clears the cache** — DevTools → Application → IndexedDB →
-   `grocery-local` must be empty. The privacy check; matters most.
-8. **Two accounts, one household** — unchanged sharing.
+1. **Sign-out wipes IndexedDB** — the one that failed last round. Sign out,
+   then DevTools → Application → IndexedDB → `grocery-local`: every store
+   empty. Try it **both online and offline**, since the offline path is what
+   was broken. This is the privacy check.
+2. **Offline is fast** — airplane mode, scan a known barcode: should answer
+   in well under a second, not after an 8-second pause.
+3. **Scan shows "looking it up…"** on both the Products screen scan and the
+   Home "Scan a product" path.
+4. **Offline refresh reaches Home**, not create-household, not login.
+5. **Offline sign-in explains itself** — sign out, go offline, try to sign
+   in: should say signing in needs a connection, not a raw error.
+6. **Nothing regressed online** — full pass, **no "Offline" bar** while
+   connected.
+7. **Two accounts, one household** — unchanged sharing.
 
 ## Next up
 Per `docs/ROADMAP.md`, one spec at a time, each planned and approved before

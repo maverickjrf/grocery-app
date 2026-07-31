@@ -5,7 +5,7 @@ import { computeStoreSummary, relativeDays } from './insights.js';
 import { session } from './session.js';
 import { openPriceForm, showProductDetail } from './product_detail.js';
 import { openProductForm } from './product_form.js';
-import { escape } from './ui.js';
+import { escape, showBusy } from './ui.js';
 import { formatPackage } from './units.js';
 import { modalController } from './nav.js';
 
@@ -16,8 +16,10 @@ export async function startShoppingScan(onHome) {
   const code = await scanBarcode();
   if (!code) return; // cancelled — home is still underneath
   let product = null;
+  const done = showBusy('Barcode scanned — looking it up…');
   try { product = await productRepository.findByBarcode(code); }
   catch (err) { alert(err.message || 'Lookup failed.'); return; }
+  finally { done(); }
 
   if (product) showFoundPanel(product, onHome);
   else showNotFound(code, onHome);

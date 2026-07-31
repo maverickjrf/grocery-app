@@ -24,13 +24,14 @@ export const authRepository = {
     return data.user;
   },
 
+  // Never throws. Signing out has to work with no network — and a failure
+  // here previously skipped the cache wipe entirely, because the call threw
+  // before reaching it, leaving a household's products and prices readable
+  // on a device someone had just signed out of.
   async signOut() {
-    const { error } = await supabase.auth.signOut();
-    // Cleared even if the sign-out call itself failed: leaving a household's
-    // products and prices readable on a device someone just signed out of is
-    // the wrong way to fail.
+    try { await supabase.auth.signOut(); }
+    catch { /* server unreachable; the local session is cleared regardless */ }
     await forgetEverything();
-    if (error) throw error;
   },
 
   // Reads the session Supabase persists in localStorage, so it answers

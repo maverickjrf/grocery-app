@@ -59,6 +59,13 @@ function showAuthScreen(mode = 'signin') {
 
 function friendlyError(err) {
   const msg = (err && err.message) || 'Something went wrong.';
+  // Signing in has to reach the server to check the password — there is no
+  // offline path for it, and storing credentials to fake one would be worse
+  // than the inconvenience. Staying signed in offline does work; it's only a
+  // fresh sign-in that can't.
+  if (isNetworkError(err)) {
+    return "You're offline. Signing in needs a connection — but once you've signed in on this device, you stay signed in offline.";
+  }
   if (msg.includes('Invalid login credentials')) return 'Wrong username or password.';
   if (msg.includes('already registered')) return 'That username is already taken.';
   return msg;

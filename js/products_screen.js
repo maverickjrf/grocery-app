@@ -1,4 +1,4 @@
-import { render, escape, icons } from './ui.js';
+import { render, escape, icons, showBusy } from './ui.js';
 import { productRepository } from './products.js';
 import { scanBarcode } from './scanner.js';
 import { showProductDetail } from './product_detail.js';
@@ -157,8 +157,10 @@ async function scanAndRoute(reload) {
   const code = await scanBarcode();
   if (!code) return;
   let existing = null;
+  const done = showBusy('Barcode scanned — looking it up…');
   try { existing = await productRepository.findByBarcode(code); }
   catch (err) { alert(err.message || 'Barcode lookup failed.'); return; }
+  finally { done(); }
   if (existing) openProductForm({ product: existing, onSaved: reload });
   else openProductForm({ prefill: { barcode: code, scannedNew: true }, onSaved: reload });
 }

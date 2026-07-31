@@ -6,16 +6,56 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-Branch: `main`, tree clean, everything pushed and live.
-**Spec 6 Merge A (service worker + app shell)** (`fb25c7d`) is tested and
-confirmed working. The app now loads without a network. No schema change,
-no migration.
+**UNCOMMITTED, pending human test — Spec 6 Merge B1: offline reads.**
+Products, stores and price history now come from a saved local copy when the
+network is gone. **No schema change, no migration** — code only.
+
+New: `js/local_db.js` (IndexedDB + the `readThrough` helper),
+`js/connectivity.js` (offline state + bar). Modified: `js/products.js`,
+`js/stores.js`, `js/observations.js`, `js/household.js`, `js/auth.js`,
+`js/app.js`, `css/styles.css`, and `sw.js` (the two new modules added to
+`SHELL_ASSETS`).
+
+**Fixes a live lockout bug:** `showMain()` treated *any* error from
+`getMyHousehold()` as "not signed in", so opening the app with no signal
+dropped the user on the login screen. Now a network failure returns the
+cached household instead, and only a genuine auth failure reaches sign-in.
+
+Deliberately *less* than the roadmap specced, and the roadmap is annotated to
+say so:
+- **No sync engine, no watermarks, no hard-delete reconciliation.** Reads are
+  network-first-then-save and replace the saved copy wholesale, so ordinary
+  use is the sync and deleted rows drop out by themselves. This removed ~120
+  lines and the two fiddliest bugs in the original design.
+- **No opt-in toggle for history caching** — always cached.
+- Offline detected by requests failing (8s timeout), not `navigator.onLine`,
+  which lies for a connection that carries no traffic.
+
+Landed at ~250 lines rather than the 400-500 first estimated, after the human
+pushed back on the complexity. That pushback was correct.
+
+**Merge B1 does NOT add offline writes.** Recording a price, adding a
+product, or editing anything still needs a connection and will error offline.
+That is Merge B2. `local_db.js` creates an empty `outbox` store now so B2
+doesn't need an IndexedDB version bump.
+
+Two things to verify empirically, flagged during the build:
+- Whether `supabase.auth.getSession()` reliably answers offline with an
+  expired token. It reads localStorage and should, but this was not proven.
+- Whether an RLS denial still surfaces as a real error rather than being
+  masked by cached data (`isNetworkError` treats anything with a Postgres
+  error code as a genuine refusal).
+
+Prior to this, tested and live: **Spec 6 Merge A (service worker + app
+shell)** (`fb25c7d`) — the app loads without a network.
 
 Verified on the human's device: normal online use unaffected (which also
 clears the Supabase version pin); airplane-mode cold open renders the app
-instead of the browser's offline page; offline data screens error rather
-than showing stale prices (confirming Supabase responses are never cached);
-DevTools shows the worker activated with `shell-v1` / `cdn-v1` populated.
+instead of the browser's offline page; DevTools shows the worker activated
+with `shell-v1` / `cdn-v1` populated. Offline data screens errored rather
+than showing stale prices, confirming Supabase responses are never cached —
+note B1 above deliberately changes that last one: data screens now show
+*saved* data offline, from IndexedDB, never from the service worker.
 
 Still unverified, neither blocking:
 - **The "new version is ready" prompt** — needs a deploy *after* the worker
@@ -104,7 +144,26 @@ not achievable on Samsung Internet; reverted via `git revert` (`915f842`,
 no further action needed there.
 
 ## Waiting on
-Nothing. Ready to plan **Spec 6 Merge B** (local data layer + sync).
+**Human to test Spec 6 Merge B1.** Needs HTTPS (service worker) and airplane
+mode, so it has to be pushed to be tested — same as `fb25c7d`. Checklist:
+
+1. **Nothing regressed online** (first) — sign in, products, stores, product
+   detail with history, scan, record a price, add/edit/archive a product and
+   a store. All exactly as before, and **no "Offline" bar**.
+2. **The lockout fix** — with the app loaded once online, go airplane mode
+   and cold-open the app. It must reach Home, *not* the login screen.
+3. **Offline reads** — airplane mode: products list, stores list, and a
+   product's price history + "Where to buy" all show saved data, with the
+   "Offline — showing saved data" bar visible.
+4. **Offline scan** — scanning a known barcode offline still finds the
+   product.
+5. **Bar clears** — turn the network back on, reload: the bar disappears.
+6. **Writes still fail cleanly offline** (expected in B1) — recording a price
+   offline should show a friendly error, not hang and not silently fail.
+7. **Sign-out clears the cache** — sign out, then DevTools → Application →
+   IndexedDB → `grocery-local`: every store should be empty. This is the
+   privacy check; it matters most.
+8. **Two accounts, one household** — unchanged sharing.
 
 ## Next up
 Per `docs/ROADMAP.md`, one spec at a time, each planned and approved before

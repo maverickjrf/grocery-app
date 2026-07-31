@@ -145,6 +145,16 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
 .pack-toggle { display: block; margin: -8px 0 18px; }
 .modal-scroll { max-height: 88vh; overflow-y: auto; }
 
+/* "Offline — showing saved data". Sits at the top so it reads as a condition
+   of the whole screen rather than an action, and never overlaps the update
+   bar at the bottom. */
+.offline-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 90;
+  padding: 7px 12px; text-align: center;
+  font-size: 13px; font-weight: 500;
+  background: var(--text-muted); color: var(--surface);
+}
+
 /* "A new version is ready" bar. Pinned to the bottom, clear of the FAB's
    corner, and above modal overlays so it stays reachable. */
 .sw-update {

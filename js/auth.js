@@ -1,4 +1,5 @@
 import { supabase } from './config.js';
+import { forgetEverything } from './local_db.js';
 
 // Turn a username into a hidden email so we can use Supabase Auth (email-based)
 // while the user only ever types a username.
@@ -25,13 +26,24 @@ export const authRepository = {
 
   async signOut() {
     const { error } = await supabase.auth.signOut();
+    // Cleared even if the sign-out call itself failed: leaving a household's
+    // products and prices readable on a device someone just signed out of is
+    // the wrong way to fail.
+    await forgetEverything();
     if (error) throw error;
   },
 
+  // Reads the session Supabase persists in localStorage, so it answers
+  // without a network. Wrapped because a thrown error here would otherwise
+  // reject app start-up outright.
   async getCurrentUser() {
-    const { data } = await supabase.auth.getSession();
-    if (!data.session) return null;
-    const u = data.session.user;
-    return { id: u.id, username: toUsername(u.email) };
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) return null;
+      const u = data.session.user;
+      return { id: u.id, username: toUsername(u.email) };
+    } catch {
+      return null;
+    }
   },
 };

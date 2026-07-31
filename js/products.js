@@ -1,21 +1,37 @@
 import { supabase } from './config.js';
 import { baseUnitFor, normalizeQuantity, totalBaseQuantity } from './units.js';
+import { readThrough, replaceAll, getAll, STORES } from './local_db.js';
 
 const PRODUCT_FIELDS =
   'id, name, brand, category, barcode, unit_count, unit_size, unit_size_unit, base_unit, total_base_quantity';
 
 export const productRepository = {
+  // Fetches every product, archived included, and filters locally. One query
+  // and one cached copy serves both the normal and "show archived" views —
+  // caching a separate copy per filter would be two sets to keep in step.
   async getProducts({ includeArchived = false } = {}) {
-    let q = supabase.from('products')
-      .select(PRODUCT_FIELDS + ', photo_url, archived')
-      .order('name', { ascending: true })
-      .order('total_base_quantity', { ascending: true });
-    if (!includeArchived) q = q.eq('archived', false);
-    const { data, error } = await q;
-    if (error) throw error;
-    return data;
+    const rows = await readThrough({
+      fetch: async () => {
+        const { data, error } = await supabase.from('products')
+          .select(PRODUCT_FIELDS + ', photo_url, archived')
+          .order('name', { ascending: true })
+          .order('total_base_quantity', { ascending: true });
+        if (error) throw error;
+        return data;
+      },
+      save: (data) => replaceAll(STORES.products, data),
+      load: () => getAll(STORES.products),
+    });
+    const visible = includeArchived ? rows : rows.filter((p) => !p.archived);
+    // The saved copy comes back in insertion order, so re-apply the sort the
+    // server would have done.
+    return [...visible].sort((a, b) =>
+      a.name.localeCompare(b.name) ||
+      Number(a.total_base_quantity) - Number(b.total_base_quantity));
   },
 
+  // Scanning in a store is the likeliest place to have no signal, so this
+  // falls back to the saved products rather than failing the scan.
   async findByBarcode(barcode) {
     const code = (barcode || '').trim();
     // UPC-A (12 digits) and EAN-13 (13 digits, leading 0) are the same code —
@@ -24,11 +40,23 @@ export const productRepository = {
     const variants = [code];
     if (code.length === 13 && code.startsWith('0')) variants.push(code.slice(1));
     else if (code.length === 12) variants.push('0' + code);
-    const { data, error } = await supabase.from('products')
-      .select(PRODUCT_FIELDS)
-      .in('barcode', variants).limit(1);
-    if (error) throw error;
-    return data[0] || null;
+
+    const rows = await readThrough({
+      fetch: async () => {
+        const { data, error } = await supabase.from('products')
+          .select(PRODUCT_FIELDS)
+          .in('barcode', variants).limit(1);
+        if (error) throw error;
+        return data; // an empty result is a real answer: no such barcode
+      },
+      // A single-product lookup must not overwrite the full product cache.
+      save: () => Promise.resolve(),
+      load: async () => {
+        const cached = await getAll(STORES.products);
+        return cached.filter((p) => variants.includes((p.barcode || '').trim()));
+      },
+    });
+    return rows[0] || null;
   },
 
   async createProduct(p) {

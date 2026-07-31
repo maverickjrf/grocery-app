@@ -164,6 +164,54 @@ Note the whole zxing barcode graph currently loads at boot, because
 `products_screen.js` imports `scanner.js` statically. Making that a dynamic
 import would shrink the offline-critical surface considerably; not done yet.
 
+### Offline: local data (Spec 6, Merge B1)
+`js/local_db.js` keeps a copy of household data in IndexedDB so screens have
+something to show with no network. `js/connectivity.js` owns the offline
+state and the "Offline — showing saved data" bar.
+
+**There is no sync engine, deliberately.** Every read is
+network-first-then-save, so ordinary use of the app *is* the sync, and each
+fetch replaces the saved copy wholesale — which means a row deleted on the
+server simply isn't in the next fetch. The originally specced design tracked
+an `updated_at` watermark per table and pulled deltas, which then required a
+second mechanism to notice hard-deleted rows. At household scale (hundreds of
+products, low thousands of prices) that bought nothing and cost the two
+fiddliest bugs in the design.
+
+Every cached read goes through one helper, `readThrough`:
+1. Try the network, with an 8s timeout.
+2. Success → save the rows, clear the offline flag, return them.
+3. **Network failure or timeout** → set the offline flag and return the saved
+   copy. If nothing is saved, rethrow so the screen shows a real error.
+4. **Anything with a Postgres error code** → rethrow untouched. An RLS denial
+   or a validation failure is the server answering, not a missing network,
+   and must never be masked by stale data.
+
+Offline is detected by requests failing, **not** by `navigator.onLine`, which
+reports "online" for a phone holding a connection that carries no traffic —
+exactly the dead-zone case. The browser is trusted when it says the
+connection dropped, not when it claims to have one.
+
+Two consequences worth knowing:
+- Products and stores are fetched unfiltered (archived included) and filtered
+  in JS, so one saved copy serves both the normal and "show archived" views.
+- Price history is saved exactly as the server returns it, embedded store
+  name and all, so no join is rebuilt offline. A store renamed while offline
+  shows its old name in history until the next successful fetch.
+
+The cache is wiped whenever `meta.householdId` changes and on sign-out — a
+stale cache from a household the user has left is a privacy problem, not just
+a wrong number.
+
+`getMyHousehold` is cached because it is the first call after start-up and
+the router treated *any* failure as "not signed in", so losing signal used to
+drop the user on the login screen. Its invite code is deliberately **not**
+served from cache: a stale invite code is worse than none.
+
+Not built yet (Merge B2): offline writes. Recording a price still needs a
+connection. `local_db.js` creates an empty `outbox` object store now, since
+adding one later would mean an IndexedDB version bump.
+
 ### Invite security
 Invite codes are 10 chars from an ambiguity-free alphabet (no O/0, I/1/L), expire
 after 3 days, and support retire/rotate. Join returns three-way feedback: valid /

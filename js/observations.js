@@ -1,9 +1,13 @@
 import { supabase } from './config.js';
 import { pricePerBase, pricePerSubunit, baseUnitFor } from './units.js';
+import { readThrough, replaceByIndex, getAllByIndex, STORES } from './local_db.js';
 
+// `product_id` and `created_at` are selected for the local copy's sake: the
+// first indexes cached history by product, the second reproduces the server's
+// tie-break between prices recorded on the same day.
 const HISTORY_FIELDS =
-  'id, store_id, observed_price, calculated_unit_price, calculated_price_per_subunit, ' +
-  'quantity_purchased, observation_date, notes, base_unit, unit_count, unit_size, unit_size_unit, ' +
+  'id, product_id, store_id, observed_price, calculated_unit_price, calculated_price_per_subunit, ' +
+  'quantity_purchased, observation_date, created_at, notes, base_unit, unit_count, unit_size, unit_size_unit, ' +
   'recorded_by_name, store:stores(name, location)';
 
 // The package snapshot every observation carries, so history stays correct even
@@ -72,14 +76,30 @@ export const observationRepository = {
     if (error) throw error;
   },
 
+  // Cached per product. Rows are saved exactly as the server returns them —
+  // including the embedded store name — so the saved copy needs no join
+  // rebuilt offline. The cost is that a store renamed while offline shows its
+  // old name in history until the next successful fetch, which is a fair
+  // trade for not maintaining a second lookup.
   async getHistoryForProduct(productId) {
-    const { data, error } = await supabase.from('observations')
-      .select(HISTORY_FIELDS)
-      .eq('product_id', productId)
-      .eq('is_deleted', false)
-      .order('observation_date', { ascending: false })
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data;
+    const rows = await readThrough({
+      fetch: async () => {
+        const { data, error } = await supabase.from('observations')
+          .select(HISTORY_FIELDS)
+          .eq('product_id', productId)
+          .eq('is_deleted', false)
+          .order('observation_date', { ascending: false })
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        // Deleted rows are filtered by the query, so replacing this product's
+        // saved rows wholesale is also what drops ones deleted since.
+        return data;
+      },
+      save: (data) => replaceByIndex(STORES.observations, 'product_id', productId, data),
+      load: () => getAllByIndex(STORES.observations, 'product_id', productId),
+    });
+    return [...rows].sort((a, b) =>
+      String(b.observation_date).localeCompare(String(a.observation_date)) ||
+      String(b.created_at || '').localeCompare(String(a.created_at || '')));
   },
 };

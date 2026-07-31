@@ -27,9 +27,28 @@ data layer + sync.
 > leaves a broken graph offline), and freshness comes from background
 > revalidation rather than a hand-bumped `CACHE_VERSION` (nothing is
 > content-hashed without a build step, so a forgotten bump would pin users to
-> stale JS permanently). See `docs/ARCHITECTURE.md` → "Offline: app shell"
-> for the as-built design. **Everything from section 2 onward is still to
-> build — that is Merge B.**
+> stale JS permanently). See `docs/ARCHITECTURE.md` → "Offline: app shell".
+>
+> **Merge B was then split in two**, and B1 (offline reads) is built —
+> sections 2, 5, 6 and part of 7 below are **superseded** by it; see
+> `docs/ARCHITECTURE.md` → "Offline: local data". Three further departures,
+> all in the direction of less machinery:
+> - **No sync engine and no watermarks.** Reads are network-first-then-save
+>   and replace the saved copy wholesale, so normal use is the sync and
+>   deleted rows drop out on their own. This deletes section 4 entirely,
+>   including the "hard-delete gap" and its reconciliation-vs-tombstones
+>   choice — that problem only existed because of delta pulls.
+> - **No opt-in for caching price history.** At household scale the data is
+>   small enough that a toggle, a size estimate, a meta flag and a whole
+>   conditional path through reads were not worth it. History is always
+>   cached.
+> - **Offline is detected by requests failing, not `navigator.onLine`**,
+>   which reports "online" for a connection carrying no traffic.
+>
+> **Still to build — Merge B2:** everything in sections 3 and 4 about
+> *writes* (the outbox, flush, retry, conflict handling) plus the pending
+> markers and failed-sync surfacing in section 7. Recording a price still
+> requires a connection.
 
 Note: the "stuck on Saving…" bug first blamed on connectivity turned out to
 be a nav/modal-teardown defect, fixed separately — see `docs/STATUS.md`. It

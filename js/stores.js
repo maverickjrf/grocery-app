@@ -1,14 +1,23 @@
 import { supabase } from './config.js';
+import { readThrough, replaceAll, getAll, STORES } from './local_db.js';
 
 export const storeRepository = {
+  // Fetches every store, archived included, and filters locally — same reason
+  // as products: one cached copy rather than one per filter.
   async getStores({ includeArchived = false } = {}) {
-    let query = supabase.from('stores')
-      .select('id, name, location, archived')
-      .order('name', { ascending: true });
-    if (!includeArchived) query = query.eq('archived', false);
-    const { data, error } = await query;
-    if (error) throw error;
-    return data;
+    const rows = await readThrough({
+      fetch: async () => {
+        const { data, error } = await supabase.from('stores')
+          .select('id, name, location, archived')
+          .order('name', { ascending: true });
+        if (error) throw error;
+        return data;
+      },
+      save: (data) => replaceAll(STORES.stores, data),
+      load: () => getAll(STORES.stores),
+    });
+    const visible = includeArchived ? rows : rows.filter((s) => !s.archived);
+    return [...visible].sort((a, b) => a.name.localeCompare(b.name));
   },
   async createStore(name, location) {
     const { error } = await supabase.from('stores')

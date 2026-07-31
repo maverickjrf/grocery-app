@@ -8,6 +8,7 @@ import { session } from './session.js';
 import { startShoppingScan } from './shopping.js';
 import { confirmDialog } from './dialog.js';
 import { registerServiceWorker } from './sw_register.js';
+import { isNetworkError } from './local_db.js';
 
 // ---------- LOGIN / SIGNUP ----------
 function showAuthScreen(mode = 'signin') {
@@ -67,9 +68,30 @@ async function showMain() {
   render(`<div class="loading">Loading…</div>`);
   let household;
   try { household = await householdRepository.getMyHousehold(); }
-  catch { return showAuthScreen('signin'); }
+  catch (err) {
+    // Losing signal is not signing out. Dropping someone on the login screen
+    // because their connection died is how an offline-capable app manages to
+    // lock people out in exactly the dead zone it was built for.
+    if (isNetworkError(err)) return showOfflineNotice();
+    return showAuthScreen('signin');
+  }
   if (household) showHome(household);
   else showHouseholdGate('create');
+}
+
+// Only reachable before anything has ever been cached on this device — once
+// the household has been seen once, getMyHousehold answers from the cache.
+function showOfflineNotice() {
+  render(`
+    <div class="screen-center"><div class="card">
+      <div class="brand"><div class="brand-badge">${icons.cart}</div>
+        <h1>No connection</h1></div>
+      <p class="subtitle">You're still signed in, but this device hasn't saved
+        a copy of your household yet. Reconnect once and it will be available
+        offline afterwards.</p>
+      <button id="retry" class="btn-primary">Try again</button>
+    </div></div>`);
+  document.getElementById('retry').onclick = () => showMain();
 }
 
 // ---------- CREATE / JOIN HOUSEHOLD ----------

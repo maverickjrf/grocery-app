@@ -15,7 +15,9 @@ user-observed — the app does not scrape or auto-look-up external prices.
 - **Hosting:** GitHub Pages (static) at https://maverickjrf.github.io/grocery-app/
 - **Barcode scanning:** `@zxing/browser@0.1.5` + `@zxing/library@0.21.3`,
   loaded as ESM from esm.sh.
-- **Supabase client:** `@supabase/supabase-js@2` from jsdelivr ESM.
+- **Supabase client:** `@supabase/supabase-js@2.111.0` from jsdelivr ESM.
+- **Offline:** `sw.js` caches the app shell (Spec 6, Merge A). Data caching
+  and offline writes are Merge B and not built yet.
 - **Cost:** Zero. Supabase free tier (no credit card), GitHub Pages free.
 
 ## Architectural Decisions (and the why)
@@ -132,6 +134,36 @@ ever navigates a screen, and only leaves the app once the stack is empty
   create/join household) are intentionally out of scope — Back there is
   unchanged from before.
 
+### Offline: app shell (Spec 6, Merge A)
+`sw.js` sits at the repo root so its scope is the GitHub Pages subpath
+`/grocery-app/`. Registered from `js/sw_register.js`, after `load`, wrapped so
+a failure only costs offline support and never start-up.
+
+Per request kind: same-origin shell files are **stale-while-revalidate**;
+navigations serve the cached `index.html`; the CDN module hosts
+(`cdn.jsdelivr.net`, `esm.sh`) are **cache-first, filled at runtime**;
+`*.supabase.co` is **network-only and never cached**.
+
+Two decisions worth keeping straight:
+- **CDN modules are not precached.** esm.sh answers with a shim that
+  re-exports deeper versioned files, so caching the entry URL alone leaves a
+  broken module graph offline. Runtime caching captures the whole graph on
+  first online use, whatever shape it has. This is why the acceptance bar is
+  "works offline once the app has been opened online at least once".
+- **Freshness does not depend on remembering to bump a version.** With no
+  build step nothing is content-hashed, so a hand-bumped cache version would
+  make one forgotten bump pin every user to stale JS permanently. Instead
+  each response is revalidated in the background and a changed
+  `ETag`/`Last-Modified` raises the reload prompt. `CACHE_VERSION` remains
+  only as a hard reset.
+
+`?sw=off` unregisters the worker and clears every cache — the documented
+recovery route (see [docs/DEPLOYMENT.md](DEPLOYMENT.md)).
+
+Note the whole zxing barcode graph currently loads at boot, because
+`products_screen.js` imports `scanner.js` statically. Making that a dynamic
+import would shrink the offline-critical surface considerably; not done yet.
+
 ### Invite security
 Invite codes are 10 chars from an ambiguity-free alphabet (no O/0, I/1/L), expire
 after 3 days, and support retire/rotate. Join returns three-way feedback: valid /
@@ -155,10 +187,13 @@ codes that genuinely existed, to avoid leaking which codes are real.
   cheapest-store insight → record price with current store pre-selected.
 
 ## On Hold (architected for, not built)
-- **Offline support** — app-shell caching (service worker/PWA) and offline
-  record-and-sync. Groundwork laid: repository pattern, client UUIDs, `updated_at`
-  and soft-delete columns on all tables. Supabase has no native sync, so this is a
-  real build (likely RxDB or a hand-rolled IndexedDB queue) deferred to its own phase.
+- **Offline data & sync (Spec 6, Merge B)** — app-shell caching is now built
+  (see "Offline: app shell" above); the data half is not. Still to come:
+  IndexedDB cache, an outbox for writes made offline, a sync engine, and
+  offline-safe auth. Groundwork laid: repository pattern, client UUIDs,
+  `updated_at` and soft-delete columns on all tables. Supabase has no native
+  sync, so this is a hand-rolled IndexedDB queue — RxDB is ruled out by the
+  no-bundler constraint. Full design in [docs/ROADMAP.md](ROADMAP.md).
 - **Product photos** — Supabase Storage free tier available; `photo_url` column
   exists but unused. User leaning toward scrapping to save resources.
 - **Dashboard & price-trend charts** — next up.

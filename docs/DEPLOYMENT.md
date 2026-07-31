@@ -14,6 +14,47 @@ Supabase backend. Neither has a build step or a server process to manage.
   cache aggressively.
 - Live URL: https://maverickjrf.github.io/grocery-app/
 
+## Service worker & caching
+
+`sw.js` (repo root, so its scope is `/grocery-app/`) caches the app shell so
+the app loads without a network. What this changes about deploying:
+
+- **You do not have to bump anything on a normal deploy.** The worker
+  revalidates every cached file in the background and, when GitHub Pages
+  returns a changed `ETag`/`Last-Modified`, shows the user "A new version is
+  ready — Reload". The files are already cached by then, so the reload is
+  instant. `CACHE_VERSION` in `sw.js` exists only as a hard reset; bump it to
+  force every client to discard its caches wholesale.
+- **A user may be one load behind.** The first load after a deploy is served
+  from cache while the update downloads; the prompt appears once it has. This
+  is deliberate — it is what makes the app open instantly and work offline.
+  Hard-refresh to skip the wait.
+- Supabase API calls (`*.supabase.co`) are **never** cached by the worker, so
+  a deploy can never leave someone looking at stale prices.
+- `SHELL_ASSETS` in `sw.js` lists the files precached on install. **Add new
+  `js/*.js` files to it.** Forgetting is not fatal — anything missed is cached
+  the first time it's used online — but it will not be there on a cold
+  offline start until then.
+
+### If a bad service worker ships
+
+Recovery, in order of severity:
+
+1. **Open `https://maverickjrf.github.io/grocery-app/?sw=off`** — unregisters
+   the worker, deletes every cache, and skips re-registering for that load.
+   Reload normally afterwards. Note this *does* reinstall the worker on that
+   next normal load, which is what you want once a fix has shipped; if the
+   worker is badly broken, keep using the `?sw=off` URL until it is. This is
+   the built-in kill switch — give this URL to anyone who is stuck.
+2. Push a fix and bump `CACHE_VERSION` so clients drop their old caches.
+3. Worst case, delete `sw.js` and push. Browsers that 404 on the worker file
+   drop the registration on their next update check.
+
+Note that step 1 only helps the person who opens that URL. There is no way to
+remotely un-deploy a worker already installed on someone's phone, which is why
+the registration in `js/sw_register.js` is wrapped so a failure can never
+block start-up.
+
 ## Backend: hosted Supabase
 
 The backend is a managed Supabase project — Postgres, Auth, and Row Level

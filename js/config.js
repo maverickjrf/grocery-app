@@ -1,4 +1,6 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+// Pinned to an exact version, not `@2`: the service worker caches this module,
+// and a floating major would let the cached bytes drift from what was tested.
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/+esm';
 
 // The publishable key is safe in public code — your data will be protected
 // by Row Level Security rules we add when we create database tables.

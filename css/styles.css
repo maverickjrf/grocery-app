@@ -145,6 +145,27 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
 .pack-toggle { display: block; margin: -8px 0 18px; }
 .modal-scroll { max-height: 88vh; overflow-y: auto; }
 
+/* "A new version is ready" bar. Pinned to the bottom, clear of the FAB's
+   corner, and above modal overlays so it stays reachable. */
+.sw-update {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 100;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 12px 12px 16px; border-radius: 14px;
+  background: var(--text); color: var(--bg);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.22);
+}
+.sw-update-text { flex: 1; font-size: 14px; }
+.sw-update-reload {
+  padding: 8px 14px; border: none; border-radius: 10px; cursor: pointer;
+  background: var(--primary); color: #fff; font-size: 14px; font-weight: 600;
+}
+.sw-update-dismiss {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0; border: none; border-radius: 8px;
+  background: none; color: inherit; cursor: pointer; opacity: 0.7;
+}
+.sw-update-dismiss svg { width: 18px; height: 18px; }
+
 .app-bar-title { flex: 1; }
 .app-bar-action { margin-left: auto; }
 

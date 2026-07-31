@@ -7,6 +7,7 @@ import { storeRepository } from './stores.js';
 import { session } from './session.js';
 import { startShoppingScan } from './shopping.js';
 import { confirmDialog } from './dialog.js';
+import { registerServiceWorker } from './sw_register.js';
 
 // ---------- LOGIN / SIGNUP ----------
 function showAuthScreen(mode = 'signin') {
@@ -279,6 +280,10 @@ function showHome(household) {
   })();
 }
 // ---------- START ----------
+// Deliberately not awaited: offline support must never sit between the user
+// and the first screen, and it must never be able to break start-up.
+registerServiceWorker();
+
 (async function start() {
   const user = await authRepository.getCurrentUser();
   if (user) await showMain();

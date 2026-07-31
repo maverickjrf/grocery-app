@@ -6,62 +6,52 @@ don't duplicate it here. Overwritten at natural checkpoints, not after every
 message.
 
 ## Right now
-**DEPLOYED BUT NOT YET VERIFIED — stuck-modal fix** (`js/nav.js`,
-`js/dialog.js`, `js/scanner.js`). No schema change, no migration.
+**UNCOMMITTED, pending human test — Spec 6 Merge A: service worker + app
+shell.** Makes the app *load* without a network. No schema change, no
+migration. Nothing else is in flight.
 
-Pushed deliberately *before* testing, by explicit request: the fix touches
-the barcode scanner and camera release, which can only be exercised over
-HTTPS on a real phone, so the live GitHub Pages URL is the only way to test
-it. This is a knowing exception to the normal "test before commit" rule, not
-a lapse. **If the Back button or modals misbehave, revert first and
-diagnose after** — `git revert` (not force-push), as with `915f842` /
-`0acb73a`. The manual test checklist is in "Waiting on" below.
+New: `sw.js` (repo root, so its scope is `/grocery-app/`) and
+`js/sw_register.js`. Touched: `js/app.js` (one non-awaited call),
+`css/styles.css` (update banner), `js/config.js` (pinned Supabase),
+`docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md`.
 
-Real-world symptom: adding a product froze with the button stuck reading
-"Saving…", yet the product *was* saved (visible after restarting the
-browser). First diagnosed as a connectivity blip; the human pushed back
-that the connection was stable, and re-tracing the **success** path found
-the actual defect.
+Caching, per request kind: same-origin shell = stale-while-revalidate;
+navigations = cached `index.html`; CDN hosts = cache-first, filled at
+runtime; `*.supabase.co` = **network-only, never cached**.
 
-`render()` only replaces `#app`, but modal overlays live on `document.body`
-— so the *only* thing that removed a modal was the `popstate` listener in
-`nav.js`. On success `product_form.js` called `dismiss()`, which called
-`goBack()`, which **silently no-ops when the nav stack is empty**, and
-`history.back()` fires no popstate when the stack has desynced from real
-browser history. In that case the overlay was never removed, `closed` was
-already `true` so further `dismiss()` calls were permanent no-ops, and the
-button text was never restored (only the `catch` branch does that). Hence:
-save succeeds, modal stranded forever. Needs no network fault at all.
+Two approved deviations from the Spec 6 text in `docs/ROADMAP.md` (the
+roadmap still describes the original plan; these supersede it):
+1. **CDN modules are runtime-cached, not precached.** esm.sh returns a shim
+   that re-exports deeper versioned files, so precaching the entry URL alone
+   would leave a broken module graph offline.
+2. **No hand-bumped cache version.** Nothing is content-hashed without a
+   build step, so one forgotten bump would pin users to stale JS forever.
+   Background revalidation + a changed `ETag`/`Last-Modified` raises the
+   "new version is ready" prompt instead; `CACHE_VERSION` is only a hard
+   reset.
 
-Fix (in `modalController`, so every modal benefits):
-- `dismiss()` now removes the overlay **itself** instead of waiting for
-  popstate — the visible UI no longer depends on a traversal landing.
-- New `onClosed` callback runs exactly once on every close path, with a
-  `BACK_LANDED_TIMEOUT_MS` (500ms) safety net so a caller is never left
-  awaiting a promise popstate was supposed to settle.
-- `dialog.js` and `scanner.js` converted from raw `pushModal`+`goBack` onto
-  `modalController` — they had the same latent bug (a dialog whose promise
-  never resolves; a camera never released).
-- History semantics deliberately **untouched** — the stack is never
-  force-popped, so Back behaves exactly as before. This matters: Back has
-  already been reverted twice here (`915f842`, `0acb73a`).
+Also in this change: `@supabase/supabase-js` pinned `@2` → `@2.111.0` (what
+`@2` resolved to at the time, so no behaviour change is expected) — CLAUDE.md
+requires pinned versions, and a floating major would let service-worker-cached
+bytes drift from what was tested.
 
-Not attributable to Spec 4 despite the timing — the nav machinery predates
-it (`06f724a`) and Spec 4 added no `pushScreen`/`pushModal` calls. Most
-likely desync source is the scan→form path: `scanBarcode()` resolves from
-*inside* the popstate handler, and `scanAndRoute` then pushes a new history
-entry in the very next microtask.
+**Merge A explicitly does NOT** add IndexedDB, the outbox, sync, an offline
+indicator, or offline auth. Data screens will still error with no connection
+— that is Merge B and is expected.
 
-Known tradeoff to watch when testing: the 500ms net means a chained
-`dismiss(next)` (only used in `js/shopping.js`) could, if popstate were ever
-slower than 500ms, open the next modal before the traversal lands and have
-it immediately popped. Same-document popstate is normally a few ms, so this
-should not be reachable — but shopping-mode chaining is worth testing.
+Known, not addressed: the whole zxing barcode graph loads at boot because
+`products_screen.js` statically imports `scanner.js`. Making it a dynamic
+import would shrink the offline-critical surface a lot. Deliberately left
+out of Merge A as a behaviour change.
 
-Prior to this, committed and live: **barcode UPC-A/EAN-13 matching fix**
-(`f8d9258`) — a scan can decode as 12-digit UPC-A while the stored barcode
-is 13-digit EAN-13 (leading `0`) or vice versa; `findByBarcode` now matches
-both forms so a known product isn't offered as new.
+Prior to this, committed and live and confirmed working on the human's
+phone: **stuck-modal fix** (`d739db9`) — `dismiss()` now removes a modal
+overlay itself rather than waiting for a `popstate` that may never arrive,
+so a completed save can no longer strand the modal reading "Saving…";
+`dialog.js`/`scanner.js` moved onto `modalController` for the same
+guarantee. History semantics untouched. And the **barcode UPC-A/EAN-13
+matching fix** (`f8d9258`) — a scan can decode as 12-digit UPC-A while the
+stored barcode is 13-digit EAN-13 (leading `0`) or vice versa.
 
 ---
 
@@ -101,23 +91,30 @@ not achievable on Samsung Internet; reverted via `git revert` (`915f842`,
 no further action needed there.
 
 ## Waiting on
-**Human to test the stuck-modal fix on a phone, against the live URL.**
-Nothing else is blocked. Checklist:
-1. **The bug itself** — Products → **+** → fill in → **Add**: modal closes
-   immediately, product appears. Repeat via the **scan** icon (scan → form →
-   Add), the most likely desync path.
-2. **Back button, every path** (the regression risk) — modal + hardware Back
-   closes it without exiting the app; Products → detail → Back preserves
-   search text and archived toggle; open a modal, **Cancel**, then Back →
-   goes up one level, not two.
-3. **Dialogs** — delete a product with no prices ("Delete forever") and one
-   with prices ("Archive"); confirm, cancel, and dismiss one with hardware
-   Back (should act as Cancel). Nothing hangs.
-4. **Camera release** — scan, cancel a scan, hardware-Back out of a scan.
-   After each, the camera indicator goes off and the scanner reopens fine.
-5. **Shopping-mode chaining** (the 500ms tradeoff) — from the found panel,
-   "Add product" and "Scan next": the next modal opens and *stays* open.
-6. **Two accounts, one household** — add a product on A, confirm on B.
+**Human to test Spec 6 Merge A.** Service workers need HTTPS, so this must be
+tested against the live URL on a phone — i.e. it has to be pushed before it
+can be fully tested, same situation as `d739db9`. Checklist:
+
+1. **Nothing regressed online** (do this first) — hard-refresh, sign in, load
+   products/stores, record a price, scan a barcode. Everything as before. This
+   also covers the Supabase version pin.
+2. **Worker installed** — DevTools → Application → Service Workers shows
+   `sw.js` activated; Cache Storage has `shell-v1` (and `cdn-v1` after a scan).
+3. **The point of the exercise** — load the app online once, then turn on
+   airplane mode and open it again. It must render (sign-in or home) rather
+   than the browser's dinosaur. Data screens erroring offline is *expected* in
+   Merge A.
+4. **Supabase never cached** — offline, a data screen must show an error, not
+   stale prices.
+5. **Update prompt** — after the *next* deploy, an already-open app should
+   show "A new version is ready"; Reload picks up the new code. (Only
+   testable on a later push.)
+6. **Kill switch** — open `.../grocery-app/?sw=off`, confirm in DevTools the
+   worker is gone and caches are cleared, and the app still works.
+7. **Two accounts, one household** — unchanged sharing behaviour.
+
+Revert route if it misbehaves: `git revert` (never force-push), then have
+anyone affected open `?sw=off`.
 
 ## Next up
 Per `docs/ROADMAP.md`, one spec at a time, each planned and approved before

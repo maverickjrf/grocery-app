@@ -11,7 +11,17 @@ round of mobile testing.** Products, stores and price history come from a
 saved local copy when the network is gone. **No schema change, no
 migration** — code only.
 
-Second round of mobile testing found four more, all now fixed:
+Third round: **price history is now warmed for the whole household**, not
+just for products whose detail screen happened to be opened online. The
+per-product cache defeated the point of the feature — the product wanted in
+a dead zone is the one you have *not* just been reading about. `Home` now
+warms all products and all history once per session (`warmOfflineCopy` in
+`js/app.js`), and `meta.historyWarmedAt` lets an empty result read as "no
+prices recorded yet" rather than "not saved on this device"
+(`readThrough`'s new `emptyIsAnswer`). `warmAllHistory` goes through
+`readThrough` so it inherits the timeout and the wipe-race guard.
+
+Second round of mobile testing found four, all fixed:
 
 **A. IndexedDB was not cleared on sign-out — the privacy check failed.** Two
 causes. `signOut()` awaited `supabase.auth.signOut()` *before* wiping, so if
@@ -206,20 +216,24 @@ no further action needed there.
 **Human to re-test Merge B1 on mobile.** Needs HTTPS and airplane mode, so it
 must be pushed to be tested.
 
-1. **Sign-out wipes IndexedDB** — the one that failed last round. Sign out,
-   then DevTools → Application → IndexedDB → `grocery-local`: every store
-   empty. Try it **both online and offline**, since the offline path is what
-   was broken. This is the privacy check.
-2. **Offline is fast** — airplane mode, scan a known barcode: should answer
-   in well under a second, not after an 8-second pause.
-3. **Scan shows "looking it up…"** on both the Products screen scan and the
-   Home "Scan a product" path.
-4. **Offline refresh reaches Home**, not create-household, not login.
-5. **Offline sign-in explains itself** — sign out, go offline, try to sign
-   in: should say signing in needs a connection, not a raw error.
-6. **Nothing regressed online** — full pass, **no "Offline" bar** while
+Easiest on a desktop browser: DevTools → Network → throttling → **Offline**
+is quicker than airplane mode, and the IndexedDB panel is right there.
+Remember to right-click `grocery-local` → **Refresh IndexedDB**; that panel
+does not live-update.
+
+1. **History works offline for a product you never opened online.** Sign in,
+   land on Home, wait a moment for the warm-up, then go offline and open a
+   product whose detail screen you have not visited this session. Its price
+   history and "Where to buy" should both be there. This is the fix.
+2. **A product with no prices shows its normal empty state offline**, not
+   "hasn't been saved on this device".
+3. **Sign-out still wipes IndexedDB** — the warm-up now runs on every fresh
+   sign-in, so re-check it does not repopulate after signing out. Try
+   **online and offline**. Privacy check; matters most.
+4. **Offline is still fast** — scanning answers well under a second.
+5. **Nothing regressed online** — full pass, **no "Offline" bar** while
    connected.
-7. **Two accounts, one household** — unchanged sharing.
+6. **Two accounts, one household** — unchanged sharing.
 
 ## Next up
 Per `docs/ROADMAP.md`, one spec at a time, each planned and approved before

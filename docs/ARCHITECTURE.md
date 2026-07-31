@@ -199,6 +199,22 @@ Two consequences worth knowing:
   name and all, so no join is rebuilt offline. A store renamed while offline
   shows its old name in history until the next successful fetch.
 
+**The cache is warmed deliberately, once per session, from Home**
+(`warmOfflineCopy` in `js/app.js`): all products, and the household's whole
+price history. A cache filled only by whatever screens someone happened to
+open is backwards — the product wanted in a dead zone is the one they have
+*not* just been reading about. History is warmed once per session rather than
+per Home visit because it is the largest table here.
+
+`meta.historyWarmedAt` records that the full history was saved, which is what
+lets an empty result for a product mean "no prices recorded yet" instead of
+"not saved on this device". `readThrough`'s `emptyIsAnswer` option carries
+that distinction; without it every empty cached read looks like a gap.
+
+A `generation` counter in `local_db.js` is bumped on every wipe, and any save
+whose fetch began before the wipe is discarded — otherwise the background
+warm-up could repopulate the store moments after sign-out cleared it.
+
 The cache is wiped whenever `meta.householdId` changes and on sign-out — a
 stale cache from a household the user has left is a privacy problem, not just
 a wrong number.

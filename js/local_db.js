@@ -168,7 +168,16 @@ function withTimeout(promise, ms) {
 //
 // `save` and `load` are passed in rather than assumed, because price history
 // is stored per product while products and stores are stored wholesale.
-export async function readThrough({ fetch: fetchFn, save, load }) {
+// `emptyIsAnswer` distinguishes "nothing is saved here" from "nothing
+// exists". Without it an empty cached result is always read as a gap, so a
+// product that genuinely has no prices yet reports itself as unavailable
+// offline instead of showing its normal empty state.
+export async function readThrough({ fetch: fetchFn, save, load, emptyIsAnswer }) {
+  const emptyMeansEmpty = async () => {
+    if (!emptyIsAnswer) return false;
+    try { return await emptyIsAnswer(); } catch { return false; }
+  };
+
   // Already known to be offline: answer from the saved copy immediately
   // rather than spending the whole timeout rediscovering it. Without this,
   // every offline read sat for 8 seconds first — which is what made
@@ -177,6 +186,7 @@ export async function readThrough({ fetch: fetchFn, save, load }) {
     try {
       const cached = await load();
       if (cached && cached.length) return cached;
+      if (await emptyMeansEmpty()) return [];
     } catch { /* nothing saved — fall through and try the network anyway */ }
   }
 
@@ -192,9 +202,10 @@ export async function readThrough({ fetch: fetchFn, save, load }) {
     markOffline();
     let cached = [];
     try { cached = await load(); } catch { /* no local copy available */ }
-    if (!cached || !cached.length) throw offlineError(
+    if (cached && cached.length) return cached;
+    if (await emptyMeansEmpty()) return [];
+    throw offlineError(
       "You're offline, and this hasn't been saved on this device yet. Open it once while connected.");
-    return cached;
   }
 }
 

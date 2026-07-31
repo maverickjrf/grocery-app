@@ -5,14 +5,24 @@ import { showStoresScreen } from './stores_screen.js';
 import { showProductsScreen } from './products_screen.js';
 import { storeRepository } from './stores.js';
 import { productRepository } from './products.js';
+import { observationRepository } from './observations.js';
 import { session } from './session.js';
 import { startShoppingScan } from './shopping.js';
 import { confirmDialog } from './dialog.js';
 import { registerServiceWorker } from './sw_register.js';
 import { isNetworkError } from './local_db.js';
 
+// Whether this session has already filled the offline copy — declared here
+// rather than beside warmOfflineCopy() below, because showAuthScreen() resets
+// it and a `let` further down the file would be in its temporal dead zone.
+let warmed = false;
+
 // ---------- LOGIN / SIGNUP ----------
 function showAuthScreen(mode = 'signin') {
+  // Reaching the sign-in screen means signing out or starting cold, and the
+  // cache has been wiped either way — so the next person to sign in on this
+  // device must warm their own, not inherit a flag saying it was done.
+  warmed = false;
   const isSignup = mode === 'signup';
   render(`
     <div class="screen-center"><div class="card">
@@ -237,6 +247,29 @@ function renderInviteSection(blockEl, household) {
     catch (err) { alert(err.message || 'Could not retire the code.'); }
   };
 }
+// Fills the offline copy of everything a dead zone needs, in the background.
+// The cache is only ever written by a read, so without this the products and
+// prices someone can see offline are limited to whichever screens they
+// happened to open while connected — which is the wrong way round, since the
+// product you need with no signal is the one you have not just been reading
+// about.
+//
+// Once per session, not per Home visit: history is the largest table here and
+// re-fetching it on every tap back to Home would be wasteful. Sign-out clears
+// the flag along with everything else.
+function warmOfflineCopy() {
+  if (warmed) return;
+  warmed = true;
+  Promise.allSettled([
+    productRepository.getProducts(),
+    observationRepository.warmAllHistory(),
+  ]).then((results) => {
+    // Let a failed attempt be retried on the next Home visit — the usual
+    // cause is being offline right now, which may not be true later.
+    if (results.some((r) => r.status === 'rejected')) warmed = false;
+  });
+}
+
 // ---------- HOME ----------
 function showHome(household) {
   render(`
@@ -291,11 +324,7 @@ function showHome(household) {
     }
   };
 
-  // Warm the offline copy of products. Nothing on this screen shows them, but
-  // the cache is only ever filled by a read, and scanning is the one thing
-  // people do with no signal — reaching for the scanner in a store having
-  // never opened the Products list would otherwise find nothing saved.
-  productRepository.getProducts().catch(() => { /* offline or busy; not urgent */ });
+  warmOfflineCopy();
 
   (async () => {
     const sel = document.getElementById('current-store');

@@ -5,6 +5,44 @@ import { readThrough, requireNetwork, replaceAll, getAll, STORES } from './local
 const PRODUCT_FIELDS =
   'id, name, brand, category, barcode, unit_count, unit_size, unit_size_unit, base_unit, total_base_quantity';
 
+// One product's barcode can be written several ways. UPC-A (12), EAN-13 and
+// ITF-14 are the same number at different lengths, differing only by leading
+// zeros — the label prints one form, the scanner may report another, and a
+// human typing it in copies whatever they see. Real example from this
+// household: Phoenix garbage bag stored as 04800375003646 and scanned as
+// 4800375003646. GS1's answer is to compare on the 14-digit zero-padded form,
+// so that is the key everything here reduces to.
+//
+// Lengths 12-14 only, for two reasons. An 8-digit EAN-8 is its own number,
+// not a shortened EAN-13, so padding it out would be claiming an equivalence
+// that does not exist — and it could then collide with a genuine 12-digit
+// code that happens to begin with zeros. Anything else (a CODE-128
+// alphanumeric, a partial code typed by hand) gets null and matches
+// literally, which is the safe direction to fail in.
+//
+// Note this only ever equates codes whose extra leading digits are zeros. A
+// true ITF-14 carton code like 14800375003646 has a non-zero indicator digit
+// and stays a distinct product — a case of 24 is not the same thing as one
+// unit, and must not be matched as if it were.
+export function gtinKey(raw) {
+  const digits = String(raw == null ? '' : raw).replace(/[\s-]/g, '');
+  if (!/^\d{12,14}$/.test(digits)) return null;
+  return digits.padStart(14, '0');
+}
+
+// The stored value could be sitting in any of those lengths, so ask the
+// database for all of them at once — still an indexed lookup, unlike a
+// pattern match.
+function barcodeVariants(code) {
+  const key = gtinKey(code);
+  if (!key) return [code];
+  const forms = new Set([code]);
+  for (const len of [12, 13, 14]) {
+    if (key.slice(0, 14 - len) === '0'.repeat(14 - len)) forms.add(key.slice(14 - len));
+  }
+  return [...forms];
+}
+
 export const productRepository = {
   // Fetches every product, archived included, and filters locally. One query
   // and one cached copy serves both the normal and "show archived" views —
@@ -34,12 +72,7 @@ export const productRepository = {
   // falls back to the saved products rather than failing the scan.
   async findByBarcode(barcode) {
     const code = (barcode || '').trim();
-    // UPC-A (12 digits) and EAN-13 (13 digits, leading 0) are the same code —
-    // a scan can come back in either form depending on the scanner/label, so
-    // match against both rather than requiring an exact stored form.
-    const variants = [code];
-    if (code.length === 13 && code.startsWith('0')) variants.push(code.slice(1));
-    else if (code.length === 12) variants.push('0' + code);
+    const variants = barcodeVariants(code);
 
     const rows = await readThrough({
       fetch: async () => {
@@ -51,12 +84,28 @@ export const productRepository = {
       },
       // A single-product lookup must not overwrite the full product cache.
       save: () => Promise.resolve(),
+      // Offline this is the only path that runs — readThrough answers from the
+      // saved copy and never reaches the fallback below — so match on the key
+      // here, not on the variant list, and the rule stays the same either way.
       load: async () => {
         const cached = await getAll(STORES.products);
-        return cached.filter((p) => variants.includes((p.barcode || '').trim()));
+        const key = gtinKey(code);
+        return cached.filter((p) => (key
+          ? gtinKey(p.barcode) === key
+          : (p.barcode || '').trim() === code));
       },
     });
-    return rows[0] || null;
+    if (rows[0]) return rows[0];
+
+    // Nothing matched literally. A stored code can still be the same number
+    // written in a way no variant list predicts — a space or dash typed in by
+    // hand, an unusual length. Compare on the key across the whole product
+    // list before declaring the barcode unknown; that read is cached, and this
+    // only runs on a miss.
+    const key = gtinKey(code);
+    if (!key) return null;
+    const all = await this.getProducts({ includeArchived: true });
+    return all.find((p) => gtinKey(p.barcode) === key) || null;
   },
 
   async createProduct(p) {

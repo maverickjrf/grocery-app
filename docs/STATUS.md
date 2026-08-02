@@ -7,8 +7,33 @@ message.
 
 ## Right now
 
-Branch `main`, tree clean, everything pushed, deployed, and **tested on the
-human's phone**. Nothing in flight, nothing blocked.
+**Deployed, not yet verified: a second barcode leading-zero fix** in
+`js/products.js`. Pushed ahead of testing because camera scanning needs HTTPS
+on a real phone — the same inversion the offline work needed.
+
+*Cause, now confirmed from real data.* The stored codes are 14-digit GTIN-14
+(`04800375003646`) while the scans come back 13-digit EAN-13
+(`4800375003646`) — Phoenix garbage bag and Knorr pork cubes both. `f8d9258`
+only ever handled 12 ↔ 13, and specifically generated **no** variants for a
+13-digit code that does not start with `0`, so the 14-digit stored form was
+never asked for. 13 ↔ 14 was simply never covered.
+
+*Fix.* Matching is structural instead of a special case: every code reduces
+to a GTIN-14 key (`gtinKey` — separators forgiven, zero-padded to 14), the DB
+is asked for all valid lengths at once so the lookup stays indexed, and a
+miss falls back to comparing keys across the cached product list, which also
+catches a stored value with a stray space or dash.
+
+Two deliberate limits, both verified: **8-digit EAN-8 is excluded** from the
+equivalence (the human's call — an EAN-8 is its own number, not a short
+EAN-13, and padding it could collide with a 12-digit code beginning in
+zeros), and only *zero* padding is equated, so a true ITF-14 carton code with
+a non-zero indicator digit stays a distinct product.
+
+**Next action: the human tests this on the phone** — scan the Phoenix garbage
+bag and the Knorr pork cubes and confirm each opens its found panel instead
+of "New product"; confirm an unknown product still reports as new; confirm
+the same scan works in airplane mode after Home has loaded once.
 
 **Spec 6 — Offline support is half done.** Merge A (app shell) and Merge B1
 (offline reads) are live and verified. Merge B2 (offline writes) is the
@@ -29,7 +54,17 @@ mobile testing), `0ad7324` (B1), `fb25c7d` (Merge A).
 
 ## Waiting on
 
-Nothing. Next session can start straight on Merge B2.
+1. **Testing the barcode fix on the phone.** It is pushed and live; nothing
+   more can be checked from a desktop, since camera scanning needs HTTPS on a
+   real device.
+2. **B2 vs Spec 5** — deliberately deferred. The human chose to land the
+   barcode fix first and decide the order next session.
+
+Open question, not blocking: **where the 14-digit stored codes came from.**
+ITF is in the scanner's format list (`js/scanner.js`), and ITF-14 is what is
+printed on outer cartons and multipacks, so an earlier scan may have read the
+carton rather than the unit. Worth a glance at whether other products carry
+14-digit codes; the fix makes it harmless either way.
 
 ## Next up — Spec 6 Merge B2: offline writes
 
@@ -72,10 +107,25 @@ Sharp edges found while building B1 that B2 has to deal with:
 Recommended shape, consistent with how B1 went: keep it small, resist the
 spec's machinery, and get it in front of real use early.
 
-### After B2
-Per `docs/ROADMAP.md`: **Spec 5** (sales, regular prices, multi-buy promos),
-then **Milestone A** (dashboard & price-trend chart). One spec at a time,
-each planned and approved before any code.
+### Spec 5 — decided this session, not yet built
+Real use turned up the bug Spec 5 exists to fix: a sale price was tagged
+"cheapest". Two design points are now settled and written into
+`docs/ROADMAP.md` — read them there before planning it:
+- **Ranking never uses a sale price.** Regular price if recorded, else that
+  store's latest non-sale price, else the sale price but with no "Cheapest"
+  badge. The spec's original straight fallback to `observed_price` is
+  superseded; making regular price mandatory was rejected.
+- **Recent-sale badge in three places** — store card, product list row, and
+  product detail header — off one shared 7-day constant.
+
+Also settled: existing rows where a sale was entered as a plain price get
+**marked as sales through the normal edit form** once the flag exists. Do not
+launder sale prices into the notes field — that was considered and rejected,
+because a free-text note cannot raise a badge or be excluded from averages.
+
+### After that
+**Milestone A** (dashboard & price-trend chart). One spec at a time, each
+planned and approved before any code.
 
 ## Known follow-ups (none blocking)
 

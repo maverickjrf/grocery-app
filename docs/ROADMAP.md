@@ -294,11 +294,23 @@ existing live unit-price hint working off the computed effective price.
 **Store comparison / "Where to buy" changes**
 
 This is the important behavioral change:
-- Ranking ("Cheapest" sort) uses regular price where known — i.e. for each
-  store's latest observation, rank on `regular_price` if `is_on_sale` and
-  `regular_price` is present, else on `observed_price`. Rationale: sale
+- Ranking ("Cheapest" sort) never ranks on a sale price. Rationale: sale
   prices are transient; ranking on them would send people across town
-  chasing expired promos.
+  chasing expired promos. For each store, the ranking price is:
+  1. its latest observation's `regular_price`, if that observation is on
+     sale and the regular price was filled in; else
+  2. its latest observation that is **not** on sale, on `observed_price`;
+     else
+  3. the sale price — but a store ranked this way can never hold the
+     "Cheapest" badge, because nothing is known about its usual price.
+
+  > **Decided 2026-08-02, amending this spec.** The original text fell back
+  > straight to `observed_price` when a sale had no regular price recorded,
+  > which reproduces the exact bug that prompted the change: a sale price
+  > was tagged cheapest in real use. Making the regular price mandatory was
+  > considered and rejected — in the aisle you often genuinely don't know
+  > the usual price, and forcing a guess puts bad data in the column the
+  > ranking depends on.
 - Display shows what you'd actually pay: the store card shows
   `observed_price` (the real current price), and when the latest
   observation is on sale, adds a clear sale marker plus the regular price
@@ -310,6 +322,16 @@ This is the important behavioral change:
   not a magic number scattered around.
 - The "Cheapest" badge follows the ranking rule (regular price), so it
   means "usually cheapest here", not "has a promo today".
+
+**Recent-sale badge (decided 2026-08-02)**
+
+"Was this on sale in the last 7 days?" must be answerable at a glance,
+without opening anything. The same 7-day constant drives a badge in three
+places: the store card in "Where to buy", the **product list** row, and the
+**product detail header**. On the list and the header the badge means "some
+store had this on sale within 7 days" — it is a prompt to look, not a claim
+about a particular store. This is the main reason the sale flag is a column
+and not a free-text remark: a note nobody can query cannot raise a badge.
 
 **History display**
 

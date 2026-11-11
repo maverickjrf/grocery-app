@@ -1,231 +1,21 @@
 # Roadmap
 
 ## Status
-MVP complete and in real-world use. Real-world usage fixes (search
-preservation, new units, Back-button/nav-stack) and Spec 4 (two-level package
-model) are done, confirmed, and live.
-
-**Spec 6 (offline) is half done and live:** Merge A (app shell) and Merge B1
-(offline reads) are deployed and tested. **Merge B2 (offline writes) is what
-remains** — see `docs/STATUS.md` for the sharp edges found while building B1
-that B2 has to handle. After that: Spec 5 (sales/promos), then Milestone A
-(dashboard). One spec at a time, each presented as a plan for approval before
-any code is written.
+MVP complete. Real-world usage fixes, Spec 4 (two-level package model) and the
+**local-first pivot** (2026-11-11) are done: the database moved onto the
+device and Supabase, auth and households were removed — see
+`docs/ARCHITECTURE.md` → "Local-first". Next: Spec 5 (sales/promos), then
+Milestone A (dashboard). One spec at a time, each presented as a plan for
+approval before any code is written.
 
 ## Next up
 
-### Spec 6 — Offline support (full design)
-Goal: The app opens and works in dead zones. Products and stores are always
-available offline; price history is available when the household opts in.
-Observations recorded offline are queued and sync automatically on
-reconnect.
-
-Present the plan for approval before implementing, and land it in two
-merges: (A) service worker + app shell, verified working, then (B) local
-data layer + sync.
-
-> **Merge A is shipped and verified** (`fb25c7d`). The "1. Service worker"
-> section below is kept for context but is **superseded on two points** by
-> what was actually built — CDN modules are runtime-cached rather than
-> precached (esm.sh returns a re-exporting shim, so precaching the entry URL
-> leaves a broken graph offline), and freshness comes from background
-> revalidation rather than a hand-bumped `CACHE_VERSION` (nothing is
-> content-hashed without a build step, so a forgotten bump would pin users to
-> stale JS permanently). See `docs/ARCHITECTURE.md` → "Offline: app shell".
->
-> **Merge B was then split in two**, and B1 (offline reads) is built —
-> sections 2, 5, 6 and part of 7 below are **superseded** by it; see
-> `docs/ARCHITECTURE.md` → "Offline: local data". Three further departures,
-> all in the direction of less machinery:
-> - **No sync engine and no watermarks.** Reads are network-first-then-save
->   and replace the saved copy wholesale, so normal use is the sync and
->   deleted rows drop out on their own. This deletes section 4 entirely,
->   including the "hard-delete gap" and its reconciliation-vs-tombstones
->   choice — that problem only existed because of delta pulls.
-> - **No opt-in for caching price history.** At household scale the data is
->   small enough that a toggle, a size estimate, a meta flag and a whole
->   conditional path through reads were not worth it. History is always
->   cached.
-> - **Offline is detected by requests failing, not `navigator.onLine`**,
->   which reports "online" for a connection carrying no traffic.
->
-> **Still to build — Merge B2:** everything in sections 3 and 4 about
-> *writes* (the outbox, flush, retry, conflict handling) plus the pending
-> markers and failed-sync surfacing in section 7. Recording a price still
-> requires a connection.
-
-Note: the "stuck on Saving…" bug first blamed on connectivity turned out to
-be a nav/modal-teardown defect, fixed separately — see `docs/STATUS.md`. It
-is **not** evidence for this spec. The genuine requirement stands on its own
-though: repository calls have no timeout, so a mutating action must never
-leave the UI waiting forever on a response that may never arrive. Build the
-outbox and optimistic writes so that holds online as well as offline.
-
-**Architecture**
-
-Five new pieces, all behind the existing repository layer so screens change
-as little as possible:
-- Service worker (`sw.js`) — caches the app shell so the app loads offline.
-- Local store (`js/local_db.js`) — IndexedDB wrapper holding cached
-  household data and the outbox.
-- Outbox — queue of pending writes made while offline.
-- Sync engine (`js/sync.js`) — pulls server changes, flushes the outbox,
-  reports status.
-- Connectivity/status (`js/connectivity.js`) — online/offline detection and
-  a small status UI.
-
-**1. Service worker**
-- Scope is the GitHub Pages subpath (`/grocery-app/`) — register
-  accordingly; get this right or it silently controls nothing.
-- Precache on install: `index.html`, `css/styles.css`, every `js/*.js`
-  module, and the CDN modules (`@supabase/supabase-js@2` from jsdelivr,
-  `@zxing/browser@0.1.5` and `@zxing/library@0.21.3` from esm.sh). Pin exact
-  URLs matching the imports. Without these the app opens offline and
-  immediately fails.
-- Strategy: cache-first for app shell and CDN modules; network-only for
-  Supabase API calls (`*.supabase.co`) — never cache API responses in the
-  SW; data caching is IndexedDB's job.
-- Versioning: a `CACHE_VERSION` constant; on activate, delete caches not
-  matching. Bump it on every deploy that changes cached files.
-- Update flow: new SW installs in background; when it takes control, show a
-  small "Update available — reload" prompt rather than force-reloading
-  mid-use.
-- Kill switch: include a documented way to unregister/clear (a hidden
-  setting or documented steps in the README) in case a bad SW ships.
-- Register only in main/production context; guard registration in a
-  try/catch so a SW failure never blocks app boot.
-
-**2. Local store (IndexedDB)**
-
-Use raw IndexedDB, or the tiny `idb` ESM wrapper from CDN if preferred — no
-bundler-dependent library (no RxDB).
-
-Object stores:
-- `products` — keyed by id. Cached automatically (small, changes rarely).
-- `stores` — keyed by id. Cached automatically.
-- `observations` — keyed by id. Cached only when the household has opted in
-  to offline history.
-- `outbox` — keyed by auto-increment seq. Fields: `{seq, table, op, id,
-  payload, created_at, attempts, last_error}`.
-- `meta` — key/value: `{lastSyncedAt:{products,stores,observations},
-  householdId, offlineHistoryEnabled}`.
-
-Scope everything to the current `householdId`; on household change or
-logout, clear the local store completely (a stale cache from a previous
-household is a privacy problem, not just a bug).
-
-**3. Outbox (offline writes)**
-- Every mutating repository call, when offline (or when a request fails
-  with a network error), writes to IndexedDB and appends an outbox entry,
-  then returns success to the UI optimistically.
-- New records get `crypto.randomUUID()` client-side (already the pattern)
-  — this gives idempotent retries for free: if a flush succeeds but the
-  response is lost, the retry hits a primary-key conflict, which the sync
-  engine treats as success, not an error.
-- Supported ops: insert (observations, products, stores), update (edits),
-  soft_delete (`is_deleted`/`archived`). Hard deletes are not queued
-  offline — require connectivity for permanent deletion (it's rare and
-  irreversible; don't do it blind).
-- Flush order is strictly FIFO by seq so an insert always precedes its
-  later edit.
-
-**4. Sync engine**
-
-Push (flush outbox): on reconnect, on app foreground, and after any
-successful online write. Process FIFO; on success delete the entry; on
-network failure leave it and retry with backoff; on a server rejection (RLS
-denial, FK violation, validation error) move the entry to a failed state and
-surface it to the user — never silently drop a price they recorded.
-
-Pull (refresh cache): per table, fetch rows where `updated_at >
-meta.lastSyncedAt[table]`, upsert into IndexedDB, advance the watermark.
-Observations only when opt-in is on. Run on login, on reconnect, and on
-manual refresh.
-
-Hard-delete gap (must be handled explicitly): rows permanently deleted
-server-side cannot be detected by an `updated_at` pull, so they'd linger
-locally forever. Choose one and document it:
-- (a) Periodic full reconciliation — occasionally fetch all ids for the
-  household and drop local rows not present. Simple, correct, slightly
-  heavier.
-- (b) Tombstone table — a `deleted_rows(table, id, deleted_at,
-  household_id)` written by delete triggers, pulled like any other table.
-  More correct, more schema.
-
-Recommendation: (a) for now — run a full id reconciliation on login and on
-manual refresh. Revisit if it becomes slow.
-
-Conflict resolution: last-write-wins on `updated_at`. Because observations
-are append-only and deletes are soft, a superseded value is never destroyed
-— it remains in history and can be recovered. Do not prompt the user to
-choose. Document the known caveat: `touch_updated_at` stamps server time on
-flush, so this is effectively "last flushed wins" rather than "last edited
-wins." If true intent-time ordering is wanted later, add a
-`client_updated_at` column and compare on that — note it as a future
-option, don't build it now.
-
-**5. Repository integration**
-
-This is where the existing pattern pays off — screens should need almost no
-changes.
-- Reads: return local data when offline or when cached data is fresh; fall
-  through to network otherwise. Products and stores read from cache first
-  always (they're always cached). Observations read from cache when opt-in
-  is on, else network.
-- Writes: online → write through to Supabase and update the local cache;
-  offline → write to local cache + outbox, return optimistically.
-- Keep all of this inside the repositories. No screen should have to know
-  whether it's online.
-
-**6. Auth offline**
-- Rely on Supabase's persisted session (localStorage) so `getSession()`
-  works offline.
-- Critical: a failed token refresh while offline must not sign the user out
-  or bounce them to login. Distinguish "network unavailable" from "invalid
-  credentials" — only the latter logs out. Getting this wrong locks people
-  out of the app in exactly the dead zone they needed it in.
-- Cold-starting offline with a valid persisted session must land the user
-  on their home screen with cached data.
-
-**7. UI**
-- A persistent, unobtrusive offline indicator (e.g. a small bar or badge)
-  when the device is offline.
-- A pending count ("3 prices waiting to sync") and a sync status line,
-  visible from home. Tapping it can show the queued items.
-- Manual "Sync now" action.
-- Failed-sync surfacing: anything the server rejected must be visible and,
-  ideally, retryable or editable — not silently lost.
-- "Make price history available offline" toggle in the Household & account
-  section (this is the opt-in heavy caching). Show an approximate
-  size/row count so users understand what they're enabling. Off by
-  default; turning it off clears cached observations.
-- Optimistically-saved records should be visually distinguishable as
-  pending (a subtle marker in history) until confirmed.
-
-**Constraints**
-- No build step, no bundler, no framework. `idb` from CDN is acceptable;
-  RxDB/PowerSync are not.
-- Follow CLAUDE.md: any schema change (only if the tombstone option is
-  chosen) gets a dated migration the human runs manually; commit only after
-  the human tests.
-- Do not weaken RLS or cache another household's data. Clear local storage
-  on logout and household change.
-- Service worker must never cache Supabase API responses.
-
-**Acceptance**
-- Airplane mode, app already used once: app opens, shows products and
-  stores, and a price can be recorded — it appears immediately in history
-  marked pending.
-- Reconnect: pending prices sync automatically, marker clears, and they're
-  visible on a second account in the same household.
-- Airplane mode with history opt-in on: product detail shows full price
-  history and the "Where to buy" comparison.
-- Airplane mode with opt-in off: products/stores work; history shows a
-  clear "unavailable offline" state rather than an error.
-- Token refresh failing offline does not log the user out.
-- A server-rejected sync is visibly reported, not dropped.
-- Deploying a new app version prompts to update rather than silently
-  serving stale files.
+### Spec 6 — Offline support: obsolete
+Superseded by the local-first pivot. Merge A (app shell) and Merge B1 (offline
+reads) shipped and the service worker is still in use; **Merge B2 (offline
+writes, outbox, sync engine) ceases to exist as work** — every write is local,
+so there is nothing to queue or sync. The full original design is in git
+history (`ROADMAP.md` before the pivot) if a server ever returns.
 
 ### Spec 5 — Sales, regular prices, and multi-buy promos
 Goal: Record when a price is a sale price (and what the regular price is),
@@ -253,9 +43,10 @@ price for ONE package — what you'd pay per package right now. For
 multi-buy entries this is computed (see below), not typed.
 `quantity_purchased` already exists and is reused for multi-buy quantity.
 
-Backfill: existing rows get `is_on_sale = false` and nulls elsewhere. Write
-as a new dated migration under `docs/migrations/`; provide the SQL for the
-human to run.
+Backfill: existing rows get `is_on_sale = false` and nulls elsewhere. There
+is no migration to run any more — treat a missing field as false/null when
+reading, and default it in `parseBackup` (`js/backup.js`) so old backups
+restore cleanly.
 
 **Multi-buy computation**
 
@@ -351,8 +142,10 @@ this spec; just don't design anything that makes that exclusion hard.
 **Constraints**
 - No build step, no new dependency; vanilla JS, existing repository
   pattern.
-- Follow CLAUDE.md: dated migration file, the human runs the SQL, commit
-  only after the human tests, migration committed alongside its code.
+- **Add the four new columns to `COLUMNS.observations` in `js/backup.js`.**
+  The backup parser keeps only listed columns, so a column missing there is
+  silently dropped from every restore.
+- Commit only after the human tests.
 - Observations remain append-only; these are additive columns only.
 - Escape all rendered user text (`promo_note` especially).
 
@@ -369,20 +162,21 @@ this spec; just don't design anything that makes that exclusion hard.
   active.
 
 ### Milestone A — Dashboard & price-trend chart
-- Dashboard: totals (products, stores, observations), household members list,
-  recent-activity feed (latest observations).
+- Dashboard: totals (products, stores, observations), recent-activity feed
+  (latest observations).
 - Price-trend chart per product: price vs. time, filter by all stores / single
   store, windows 30d / 90d / 1y / all-time. Charting lib TBD (lightweight; a
   small canvas/SVG lib preferred over a heavy framework given no build step).
 
 ## Recently completed
+- **Local-first pivot**, 2026-11-11. IndexedDB is the database; Supabase,
+  auth, households, invite codes, product families and the offline-cache
+  machinery are gone. Backup & restore added, which also imported the
+  Supabase data. See `docs/ARCHITECTURE.md` → "Local-first".
 - **Spec 6 Merge B1 — Offline reads**, `0ad7324` (+ fixes `47c0082`,
-  `738dd6b`, `17d2b07`). IndexedDB copy of products, stores and price
-  history; reads fall back to it when the network fails; offline indicator;
-  fixed a lockout where losing signal dropped the user on the login screen.
-  See `docs/ARCHITECTURE.md` → "Offline: local data".
+  `738dd6b`, `17d2b07`). Superseded by the pivot.
 - **Spec 6 Merge A — Service worker + app shell**, `fb25c7d`. The app loads
-  without a network. See `docs/ARCHITECTURE.md` → "Offline: app shell".
+  without a network. See `docs/ARCHITECTURE.md` → "App shell caching".
 - **Stuck-modal fix**, `d739db9`. `dismiss()` removes a modal overlay itself
   rather than waiting for a `popstate` that may never arrive, which could
   strand a completed save reading "Saving…". `dialog.js`/`scanner.js` moved
@@ -420,17 +214,16 @@ this spec; just don't design anything that makes that exclusion hard.
 - Reports export (CSV / Excel).
 
 ## Deferred infrastructure
-- Product photos: Supabase Storage; `photo_url` reserved. May be scrapped.
-
-(Offline support was here as a one-line placeholder; it's now fully
-specified as Spec 6 above, in "Next up".)
+- Product photos: dropped with Supabase Storage. Would have to be IndexedDB
+  blobs, which also bloat backups. Probably scrapped.
+- Sync / an online database again: only for a concrete need (a second device
+  or person). Row shapes are kept server-compatible; nothing else is built.
 
 ## Explicitly rejected
-Cross-household sharing; multi-household membership; adopt/copy stores-with-prices;
-curated starter catalog; in-app password reset; single-use or dynamic-expiry
-invite codes.
+Adopt/copy stores-with-prices; curated starter catalog. (Household-era
+rejections — cross-household sharing, multi-household membership, password
+reset, invite-code variants — are moot now that there are no households.)
 
 ## Known follow-ups / tech debt
-- Owner-only enforcement for invite controls + ownership handoff when an owner
-  leaves (currently any member can manage invites; owner-leave can orphan
-  ownership). Bundle these together.
+- Make the zxing import dynamic (inside `scanBarcode()`), so the barcode
+  library stops loading on every boot. It is the only heavy dependency left.

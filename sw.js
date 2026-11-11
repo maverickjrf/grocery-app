@@ -8,12 +8,9 @@
 //   same-origin shell   stale-while-revalidate — instant load, self-healing
 //   navigations         same, falling back to the cached index.html
 //   CDN modules         cache-first, filled in at runtime
-//   *.supabase.co       network-only, NEVER cached
 //
-// Why Supabase is never cached: serving a stale API response would show one
-// household data that may no longer be theirs, and would mask the offline
-// state the UI needs to react to. Caching domain data is IndexedDB's job
-// (Merge B), where it can be scoped to a household and cleared on logout.
+// There is no API to think about: the app's data lives in IndexedDB on the
+// device, and the only thing fetched from elsewhere is the barcode library.
 //
 // Why stale-while-revalidate rather than a hand-bumped cache version: there
 // is no build step here, so filenames carry no content hash. If correctness
@@ -30,7 +27,7 @@ const KEEP_CACHES = new Set([SHELL_CACHE, CDN_CACHE]);
 
 // Module hosts we serve cache-first. Their responses are CORS-readable, so
 // they cache and replay normally.
-const CDN_HOSTS = new Set(['cdn.jsdelivr.net', 'esm.sh']);
+const CDN_HOSTS = new Set(['esm.sh']);
 
 // Precached on install for a cold offline start. Deliberately NOT the CDN
 // module URLs: esm.sh answers with a shim that re-exports deeper versioned
@@ -40,11 +37,9 @@ const SHELL_ASSETS = [
   './index.html',
   './css/styles.css',
   './js/app.js',
-  './js/auth.js',
-  './js/config.js',
-  './js/connectivity.js',
+  './js/backup.js',
+  './js/data_screen.js',
   './js/dialog.js',
-  './js/household.js',
   './js/insights.js',
   './js/local_db.js',
   './js/nav.js',
@@ -96,8 +91,6 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return; // writes always go straight to network
 
   const url = new URL(request.url);
-
-  if (url.hostname.endsWith('.supabase.co')) return; // never ours to touch
 
   if (CDN_HOSTS.has(url.hostname)) {
     event.respondWith(cacheFirst(request, CDN_CACHE));

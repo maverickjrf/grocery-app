@@ -12,6 +12,10 @@ import { icons } from './ui.js';
 // normally afterwards — which will install the worker again, so once a fix
 // has shipped this is self-resolving. The documented recovery route if a bad
 // worker ever ships; see docs/DEPLOYMENT.md.
+//
+// It must never touch IndexedDB. Caches hold only copies of app files; the
+// database holds the user's only copy of their prices. A recovery route that
+// wiped it would be worse than the bug it recovers from.
 const KILL_SWITCH_PARAM = 'sw';
 
 export function registerServiceWorker() {

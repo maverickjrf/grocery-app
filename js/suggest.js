@@ -1,16 +1,36 @@
-import { supabase } from './config.js';
 import { escape } from './ui.js';
+import { productRepository } from './products.js';
+import { storeRepository } from './stores.js';
 
-const RPC = {
-  product:  { fn: 'suggest_product_names', col: 'name' },
-  brand:    { fn: 'suggest_brands',        col: 'brand' },
-  store:    { fn: 'suggest_store_names',   col: 'name' },
-  category: { fn: 'suggest_categories',    col: 'category' },
+const LIMIT = 8;
+
+// Where each kind's existing values come from. Names skip archived rows —
+// suggesting a product or store you retired would steer people back to it —
+// while brands and categories are vocabulary and keep every spelling ever used.
+const SOURCES = {
+  product:  { rows: () => productRepository.getProducts(), col: 'name' },
+  brand:    { rows: () => productRepository.getProducts({ includeArchived: true }), col: 'brand' },
+  store:    { rows: () => storeRepository.getStores(), col: 'name' },
+  category: { rows: () => productRepository.getProducts({ includeArchived: true }), col: 'category' },
 };
 
-// Attach type-ahead to an <input>. kind = 'product' | 'brand' | 'store'
+// Distinct values containing the query, case-insensitively — the same rule
+// the old server-side ILIKE used. Dedupe ignores case too, so "Coke" and
+// "coke" don't both appear and invite a third spelling.
+async function suggestions(cfg, q) {
+  const needle = q.toLowerCase();
+  const seen = new Map();
+  for (const row of await cfg.rows()) {
+    const v = (row[cfg.col] || '').trim();
+    if (!v || !v.toLowerCase().includes(needle)) continue;
+    if (!seen.has(v.toLowerCase())) seen.set(v.toLowerCase(), v);
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b)).slice(0, LIMIT);
+}
+
+// Attach type-ahead to an <input>. kind = 'product' | 'brand' | 'store' | 'category'
 export function attachSuggest(input, kind) {
-  const cfg = RPC[kind];
+  const cfg = SOURCES[kind];
   if (!cfg) return;
 
   const box = document.createElement('div');
@@ -47,11 +67,9 @@ export function attachSuggest(input, kind) {
   const lookup = async () => {
     const q = input.value.trim();
     try {
-      const { data, error } = await supabase.rpc(cfg.fn, { p_query: q });
-      if (error) throw error;
       // don't suggest an exact match of what's already fully typed
-      items = (data || []).map(r => r[cfg.col])
-        .filter(v => v && v.toLowerCase() !== q.toLowerCase());
+      items = (await suggestions(cfg, q))
+        .filter(v => v.toLowerCase() !== q.toLowerCase());
       active = -1;
       paint();
     } catch { hide(); }

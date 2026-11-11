@@ -7,6 +7,10 @@
 *.sql
 !docs/migrations/*.sql
 
+# Data exports/backups — personal price history, and this repo is public.
+grocery-export*.json
+grocery-backup*.json
+
 # OS cruft
 .DS_Store
 Thumbs.db

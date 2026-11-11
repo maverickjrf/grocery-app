@@ -1,9 +1,5 @@
-import { supabase } from './config.js';
-import { baseUnitFor, normalizeQuantity, totalBaseQuantity } from './units.js';
-import { readThrough, requireNetwork, replaceAll, getAll, STORES } from './local_db.js';
-
-const PRODUCT_FIELDS =
-  'id, name, brand, category, barcode, unit_count, unit_size, unit_size_unit, base_unit, total_base_quantity';
+import { baseUnitFor, totalBaseQuantity } from './units.js';
+import { STORES, getAll, put, update, remove, countByIndex, newId, nowIso } from './local_db.js';
 
 // One product's barcode can be written several ways. UPC-A (12), EAN-13 and
 // ITF-14 are the same number at different lengths, differing only by leading
@@ -30,153 +26,72 @@ export function gtinKey(raw) {
   return digits.padStart(14, '0');
 }
 
-// The stored value could be sitting in any of those lengths, so ask the
-// database for all of them at once — still an indexed lookup, unlike a
-// pattern match.
-function barcodeVariants(code) {
-  const key = gtinKey(code);
-  if (!key) return [code];
-  const forms = new Set([code]);
-  for (const len of [12, 13, 14]) {
-    if (key.slice(0, 14 - len) === '0'.repeat(14 - len)) forms.add(key.slice(14 - len));
-  }
-  return [...forms];
-}
+const byNameThenSize = (a, b) =>
+  a.name.localeCompare(b.name) ||
+  Number(a.total_base_quantity) - Number(b.total_base_quantity);
 
 export const productRepository = {
-  // Fetches every product, archived included, and filters locally. One query
-  // and one cached copy serves both the normal and "show archived" views —
-  // caching a separate copy per filter would be two sets to keep in step.
   async getProducts({ includeArchived = false } = {}) {
-    const rows = await readThrough({
-      fetch: async () => {
-        const { data, error } = await supabase.from('products')
-          .select(PRODUCT_FIELDS + ', photo_url, archived')
-          .order('name', { ascending: true })
-          .order('total_base_quantity', { ascending: true });
-        if (error) throw error;
-        return data;
-      },
-      save: (data) => replaceAll(STORES.products, data),
-      load: () => getAll(STORES.products),
-    });
+    const rows = await getAll(STORES.products);
     const visible = includeArchived ? rows : rows.filter((p) => !p.archived);
-    // The saved copy comes back in insertion order, so re-apply the sort the
-    // server would have done.
-    return [...visible].sort((a, b) =>
-      a.name.localeCompare(b.name) ||
-      Number(a.total_base_quantity) - Number(b.total_base_quantity));
+    return visible.sort(byNameThenSize);
   },
 
-  // Scanning in a store is the likeliest place to have no signal, so this
-  // falls back to the saved products rather than failing the scan.
+  // Archived products included: scanning something you archived should find
+  // it, not offer to create a duplicate.
   async findByBarcode(barcode) {
     const code = (barcode || '').trim();
-    const variants = barcodeVariants(code);
-
-    const rows = await readThrough({
-      fetch: async () => {
-        const { data, error } = await supabase.from('products')
-          .select(PRODUCT_FIELDS)
-          .in('barcode', variants).limit(1);
-        if (error) throw error;
-        return data; // an empty result is a real answer: no such barcode
-      },
-      // A single-product lookup must not overwrite the full product cache.
-      save: () => Promise.resolve(),
-      // Offline this is the only path that runs — readThrough answers from the
-      // saved copy and never reaches the fallback below — so match on the key
-      // here, not on the variant list, and the rule stays the same either way.
-      load: async () => {
-        const cached = await getAll(STORES.products);
-        const key = gtinKey(code);
-        return cached.filter((p) => (key
-          ? gtinKey(p.barcode) === key
-          : (p.barcode || '').trim() === code));
-      },
-    });
-    if (rows[0]) return rows[0];
-
-    // Nothing matched literally. A stored code can still be the same number
-    // written in a way no variant list predicts — a space or dash typed in by
-    // hand, an unusual length. Compare on the key across the whole product
-    // list before declaring the barcode unknown; that read is cached, and this
-    // only runs on a miss.
+    if (!code) return null;
     const key = gtinKey(code);
-    if (!key) return null;
-    const all = await this.getProducts({ includeArchived: true });
-    return all.find((p) => gtinKey(p.barcode) === key) || null;
+    const all = await getAll(STORES.products);
+    return all.find((p) => (key
+      ? gtinKey(p.barcode) === key
+      : (p.barcode || '').trim() === code)) || null;
   },
 
   async createProduct(p) {
-    return requireNetwork(async () => {
-      const { data, error } = await supabase.from('products')
-        .insert(await this._toRow(p))
-        .select(PRODUCT_FIELDS)
-        .single();
-      if (error) throw error;
-      return data;
-    });
+    const now = nowIso();
+    const row = { id: newId(), ...toRow(p), archived: false, created_at: now, updated_at: now };
+    return put(STORES.products, row);
   },
 
   async updateProduct(id, p) {
-    return requireNetwork(async () => {
-      const { data, error } = await supabase.from('products')
-        .update(await this._toRow(p)).eq('id', id)
-        .select(PRODUCT_FIELDS)
-        .single();
-      if (error) throw error;
-      return data;
-    });
+    return update(STORES.products, id, (old) => ({ ...old, ...toRow(p), updated_at: nowIso() }));
   },
 
   async setArchived(id, archived) {
-    return requireNetwork(async () => {
-      const { error } = await supabase.from('products').update({ archived }).eq('id', id);
-      if (error) throw error;
-    });
+    await update(STORES.products, id, (old) => ({ ...old, archived, updated_at: nowIso() }));
   },
 
+  // Permanent, so it refuses while any price (hidden ones included) still
+  // points at the product — the job the server's foreign key used to do.
+  // The screen checks first, but the rule belongs here.
   async deleteProduct(id) {
-    return requireNetwork(async () => {
-      const { error } = await supabase.from('products').delete().eq('id', id);
-      if (error) throw error;
-    });
+    if (await this.countAllObservations(id)) {
+      const err = new Error('This product still has recorded prices, so it can only be archived.');
+      err.friendly = true;
+      throw err;
+    }
+    await remove(STORES.products, id);
   },
 
   // Counts ALL price rows (even hidden ones) — used to decide archive vs. permanent delete
   async countAllObservations(productId) {
-    return requireNetwork(async () => {
-      const { count, error } = await supabase.from('observations')
-        .select('id', { count: 'exact', head: true })
-        .eq('product_id', productId);
-      if (error) throw error;
-      return count || 0;
-    });
-  },
-
-  async _toRow(p) {
-    const { data: family_id, error } = await supabase.rpc('find_or_create_family',
-      { p_brand: p.brand || '', p_name: p.name });
-    if (error) throw error;
-    const count = p.unitCount > 0 ? p.unitCount : 1;
-    const totalInUnit = count * p.unitSize;
-    return {
-      family_id,
-      name: p.name.trim(),
-      brand: (p.brand || '').trim() || null,
-      category: (p.category || '').trim() || null,
-      barcode: (p.barcode || '').trim() || null,
-      unit_count: count,
-      unit_size: p.unitSize,
-      unit_size_unit: p.unitSizeUnit,
-      base_unit: baseUnitFor(p.unitSizeUnit),
-      total_base_quantity: totalBaseQuantity(count, p.unitSize, p.unitSizeUnit),
-      // Legacy columns, kept in step for one migration cycle as a rollback net.
-      // They keep their original meaning: the total size of the whole package.
-      package_quantity: totalInUnit,
-      package_unit: p.unitSizeUnit,
-      normalized_quantity: normalizeQuantity(totalInUnit, p.unitSizeUnit),
-    };
+    return countByIndex(STORES.observations, 'product_id', productId);
   },
 };
+
+function toRow(p) {
+  const count = p.unitCount > 0 ? p.unitCount : 1;
+  return {
+    name: p.name.trim(),
+    brand: (p.brand || '').trim() || null,
+    category: (p.category || '').trim() || null,
+    barcode: (p.barcode || '').trim() || null,
+    unit_count: count,
+    unit_size: p.unitSize,
+    unit_size_unit: p.unitSizeUnit,
+    base_unit: baseUnitFor(p.unitSizeUnit),
+    total_base_quantity: totalBaseQuantity(count, p.unitSize, p.unitSizeUnit),
+  };
+}

@@ -92,7 +92,7 @@ async function loadBody(product) {
           </div>
           <div class="history-meta">
             <div class="history-store">${escape(r.store?.name || 'Unknown store')}</div>
-            <div class="history-sub">${formatDate(r.observation_date)} · ${escape(r.recorded_by_name || 'someone')}</div>
+            <div class="history-sub">${formatDate(r.observation_date)}${r.recorded_by_name ? ' · ' + escape(r.recorded_by_name) : ''}</div>
             ${r.notes ? `<div class="history-notes">${escape(r.notes)}</div>` : ''}
           </div>
         </div>

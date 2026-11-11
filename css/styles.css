@@ -59,18 +59,6 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
   background: var(--error-bg); color: var(--error); padding: 10px 14px;
   border-radius: 10px; font-size: 14px; margin-bottom: 8px;
 }
-.switch { text-align: center; margin-top: 18px; font-size: 14px; color: var(--text-muted); }
-.switch a { color: var(--primary); text-decoration: none; font-weight: 600; }
-
-.invite-row { display: flex; gap: 8px; }
-.invite-row input { flex: 1; letter-spacing: 2px; font-weight: 600; text-transform: uppercase; }
-.btn-copy {
-  padding: 0 16px; border-radius: 12px; border: 1.5px solid var(--border);
-  background: transparent; color: var(--primary); font-weight: 600;
-  cursor: pointer; font-size: 14px; white-space: nowrap;
-}
-.btn-copy:hover { border-color: var(--primary); }
-
 .brand-badge { color: #fff; }
 
 .app-screen { min-height: 100vh; display: flex; flex-direction: column; }
@@ -168,16 +156,6 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
   .busy-spinner { animation-duration: 2s; }
 }
 
-/* "Offline — showing saved data". Sits at the top so it reads as a condition
-   of the whole screen rather than an action, and never overlaps the update
-   bar at the bottom. */
-.offline-bar {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 90;
-  padding: 7px 12px; text-align: center;
-  font-size: 13px; font-weight: 500;
-  background: var(--text-muted); color: var(--surface);
-}
-
 /* "A new version is ready" bar. Pinned to the bottom, clear of the FAB's
    corner, and above modal overlays so it stays reachable. */
 .sw-update {
@@ -273,12 +251,15 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
 }
 .btn-text:hover { color: var(--text); }
 
-.home-more { margin-top: 8px; }
-.home-more summary {
-  cursor: pointer; color: var(--text-muted); font-size: 14px; padding: 8px 0;
-  list-style: none; text-align: center;
+.backup-nudge { text-align: center; margin: 10px 0 0; }
+
+/* Backup & restore screen */
+.data-facts { margin-bottom: 20px; }
+.data-facts p { margin: 0 0 8px; }
+.data-notice {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 14px; font-size: 14px; margin: 0 0 16px;
 }
-.home-more summary::-webkit-details-marker { display: none; }
 
 .found-sub { color: var(--text-muted); font-size: 14px; margin: 2px 0 14px; }
 .cheapest-callout {
@@ -361,9 +342,3 @@ h1 { font-size: 22px; font-weight: 600; text-align: center; }
   background: none; border: none; font-size: 15px; color: var(--text); cursor: pointer;
 }
 .suggest-item:hover, .suggest-item.is-active { background: var(--bg); }
-
-.field-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-muted); }
-.invite-status { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
-.invite-status.invite-expired { color: var(--error); }
-.invite-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-.invite-actions .btn-secondary, .invite-actions .btn-text { margin-top: 0; }

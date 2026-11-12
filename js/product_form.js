@@ -143,8 +143,10 @@ export function openProductForm({ product = null, prefill = {}, onSaved = null }
       const saved = isEdit
         ? await productRepository.updateProduct(product.id, payload)
         : await productRepository.createProduct(payload);
-      dismiss();
-      if (onSaved) onSaved(saved);
+      // Chained, not called straight after: a caller may open another modal
+      // (shopping's found panel does), and opened now it would be closed by
+      // this form's own history.back() landing a moment later.
+      dismiss(() => { if (onSaved) onSaved(saved); });
     } catch (err) {
       fail(err.message || 'Could not save the product.');
       saveBtn.disabled = false; saveBtn.textContent = isEdit ? 'Save' : 'Add';

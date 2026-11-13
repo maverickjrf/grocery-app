@@ -48,6 +48,7 @@ const SHELL_ASSETS = [
   './js/product_form.js',
   './js/products.js',
   './js/products_screen.js',
+  './js/push.js',
   './js/scanner.js',
   './js/session.js',
   './js/shopping.js',
@@ -78,6 +79,51 @@ self.addEventListener('activate', (event) => {
       .filter((name) => !KEEP_CACHES.has(name))
       .map((name) => caches.delete(name)));
     await self.clients.claim();
+  })());
+});
+
+// Web Push (experiment — see js/push.js). The payload is JSON
+// { title, body, url } sent by the outside trigger. Chrome requires every
+// push to show a notification, so a missing or garbled payload still shows
+// a generic one rather than nothing.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data.text() }; // plain text: use it as the body
+  }
+  const title = String(data.title || 'Grocery Price Tracker');
+  const body = String(data.body || '');
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon: 'icons/icon-192.png',
+    badge: 'icons/badge-96.png',
+    data: { url: typeof data.url === 'string' ? data.url : '' },
+  }));
+});
+
+// Tapping a notification: focus an open window of the app if there is one,
+// otherwise open it. Only same-origin URLs are honoured, so a push payload
+// can't send the user off to an arbitrary site.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const scope = self.registration.scope;
+  let target = scope;
+  try {
+    const wanted = new URL(event.notification.data && event.notification.data.url || '', scope);
+    if (wanted.href.startsWith(scope)) target = wanted.href;
+  } catch { /* keep the scope */ }
+
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const open = windows.find((w) => w.url.startsWith(scope));
+    if (open) {
+      await open.focus();
+      if (target !== scope && 'navigate' in open) await open.navigate(target);
+      return;
+    }
+    await self.clients.openWindow(target);
   })());
 });
 

@@ -3,6 +3,7 @@ import { backupRepository, parseBackup, downloadJson } from './backup.js';
 import { relativeDays } from './insights.js';
 import { confirmDialog } from './dialog.js';
 import { pushScreen, goBack } from './nav.js';
+import { pushSupported, permission, currentSubscription, enablePush, disablePush, showLocalTest } from './push.js';
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const describe = (c) =>
@@ -63,7 +64,12 @@ async function paintDataScreen(notice = '') {
       export from the old online version of the app.</p>
     <button id="restore" class="btn-secondary">Restore from a file…</button>
     <input id="restore-file" type="file" accept=".json,application/json" hidden />
-    <p id="data-error" class="error" hidden></p>`;
+    <p id="data-error" class="error" hidden></p>
+
+    <h2 class="section-title" style="margin-top:24px">Push notifications (test)</h2>
+    <div id="push-panel"></div>`;
+
+  paintPushPanel(document.getElementById('push-panel'));
 
   const errorEl = document.getElementById('data-error');
   const showError = (m) => { errorEl.textContent = m; errorEl.hidden = false; };
@@ -91,6 +97,59 @@ async function paintDataScreen(notice = '') {
       showError(err.message || 'Could not restore that file.');
     }
   };
+}
+
+// Experiment: subscribe this device to Web Push and show the subscription,
+// which the sender script on the laptop needs. See js/push.js.
+async function paintPushPanel(panel, notice = '') {
+  if (!pushSupported()) {
+    panel.innerHTML = `<p class="subtitle">This browser can't receive push here
+      (needs HTTPS or localhost, and a browser with Push API support).</p>`;
+    return;
+  }
+
+  let sub = null;
+  try { sub = await currentSubscription(); } catch { /* treat as not subscribed */ }
+  const json = sub ? JSON.stringify(sub.toJSON(), null, 2) : '';
+
+  panel.innerHTML = `
+    ${notice ? `<p class="data-notice">${escape(notice)}</p>` : ''}
+    <p class="subtitle">Permission: <strong>${escape(permission())}</strong>.
+      ${sub ? 'This device is subscribed.' : 'Not subscribed.'}</p>
+    ${sub ? `
+      <p class="subtitle">Copy this into <code>subscription.json</code> next to the sender script.</p>
+      <textarea id="push-sub" readonly rows="8" class="push-sub">${escape(json)}</textarea>
+      <button id="push-copy" class="btn-primary">Copy subscription</button>
+      <button id="push-local" class="btn-secondary">Show a local test notification</button>
+      <button id="push-off" class="btn-secondary">Unsubscribe</button>`
+    : `<button id="push-on" class="btn-primary">Enable push</button>`}
+    <p id="push-error" class="error" hidden></p>`;
+
+  const errorEl = panel.querySelector('#push-error');
+  const run = (fn) => async () => {
+    errorEl.hidden = true;
+    try { await fn(); } catch (err) {
+      errorEl.textContent = err.message || 'Something went wrong.';
+      errorEl.hidden = false;
+    }
+  };
+  const on = (id, fn) => { const el = panel.querySelector(id); if (el) el.onclick = run(fn); };
+
+  on('#push-on', async () => { await enablePush(); paintPushPanel(panel, 'Subscribed.'); });
+  on('#push-off', async () => { await disablePush(); paintPushPanel(panel, 'Unsubscribed.'); });
+  on('#push-local', showLocalTest);
+  on('#push-copy', async () => {
+    try {
+      await navigator.clipboard.writeText(json);
+    } catch {
+      // Clipboard API refused (permissions, older WebView): select it for a manual copy.
+      const area = panel.querySelector('#push-sub');
+      area.focus();
+      area.select();
+      throw new Error('Could not copy automatically — the text is selected, copy it by hand.');
+    }
+    paintPushPanel(panel, 'Copied.');
+  });
 }
 
 async function backUp() {

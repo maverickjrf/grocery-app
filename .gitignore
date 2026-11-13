@@ -21,3 +21,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Web Push experiment: the VAPID private key and device subscriptions never belong in this public repo.
+vapid.json
+subscription.json

@@ -11,32 +11,42 @@ message.
 Supabase export was restored there. See `docs/ARCHITECTURE.md` →
 "Local-first".
 
-**Deployed but NOT yet verified: fix for the scan → add product → record
-price flow.** After adding a product from an unknown scan on Home, the found
-panel (with "Record price here") flashed and vanished: `product_form.js`
-called `onSaved` straight after `dismiss()`, so the form's own pending
-`history.back()` landed after the panel had opened and closed it. Now
-chained through `dismiss(next)`. Pushed *before* testing, deliberately — the
-path is only reachable by scanning a barcode, which needs the phone camera.
+The scan → add product → record price flow is fixed and verified on the phone
+(`850a332`).
+
+Creating a product in Manage products now opens the price form right after
+(`ac5fb2c`, tested on desktop).
+
+**Deployed, being tested on the phone: Web Push experiment (2026-11-13).** Purpose: find
+out whether a PWA can receive server-sent push on Android, to decide on it
+for a separate work project, with no real use case in this app yet. Files: `js/push.js`,
+push/notificationclick handlers in `sw.js`, a "Push notifications (test)"
+section on Backup & restore, `manifest.json` + `icons/` (the app had no
+manifest), `.gitignore` entries. The sender is a Node script **outside the
+repo** (Claude's session scratchpad, `push-sender/send.mjs` + `vapid.json`
+holding the VAPID private key; the public key is in `js/push.js`). If the
+scratchpad is lost, run `node send.mjs keys` to make a new pair, put the new
+public key in `js/push.js`, and re-subscribe.
 
 ## Waiting on
 
-**The human tests on the phone:** Home → Scan a product → unknown barcode →
-Add this product → save → the found panel stays up → Record price here
-(current store preselected) → saved price appears as "Cheapest lately" →
-one Back press returns to Home. Revert route: `git revert HEAD`, push.
+**The human tests the push experiment** on desktop localhost, then on the
+phone after a deploy (checklist was given in chat).
 
-Still unverified from the pivot: the GTIN-14 matching (`f33a33d`) — scan the
-Phoenix garbage bag and the Knorr pork cubes; each should open its found
-panel.
+Unconfirmed: the GTIN-14 matching (`f33a33d`) — scan the Phoenix garbage bag
+and the Knorr pork cubes; each should open its found panel.
+
+The human should make a phone backup and put it in Drive; until then
+`grocery-export.json` is the only off-phone copy. Supabase is left to
+auto-pause.
 
 ## Next
 
-- Offered, not agreed: open the Record price form after *creating* a product
-  from Manage products too (today it only returns to the list).
-- The Supabase project can be paused/deleted; keep `grocery-export.json`
-  until a phone backup exists off the phone.
-- Then Spec 5 (sales/promos). Remember to add its columns to `js/backup.js`.
+- Offered, not agreed: a "Share prices" export for giving data to others —
+  strips notes, quantity bought, recorder names, hidden prices and archived
+  items (a normal backup includes all of it).
+- Spec 5 (sales/promos) — present the plan for approval first. Add its new
+  columns to `COLUMNS` in `js/backup.js`.
 - Small follow-up: dynamic `import()` of zxing inside `scanBarcode()`.
 
 ## Working agreements

@@ -48,6 +48,7 @@ const SHELL_ASSETS = [
   './js/product_form.js',
   './js/products.js',
   './js/products_screen.js',
+  './js/reminders.js',
   './js/scanner.js',
   './js/session.js',
   './js/shopping.js',

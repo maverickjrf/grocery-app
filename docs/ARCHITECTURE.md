@@ -183,8 +183,8 @@ Two decisions worth keeping straight:
 - **CDN modules are not precached.** esm.sh answers with a shim that
   re-exports deeper versioned files, so caching the entry URL alone leaves a
   broken module graph offline. Runtime caching captures the whole graph on
-  first online use. So the scanner works offline once it has been used online
-  at least once; everything else works offline from the first install.
+  first online use. So the scanner works offline once a scan has been made
+  online at least once; everything else works offline from the first install.
 - **Freshness does not depend on remembering to bump a version.** With no
   build step nothing is content-hashed, so a hand-bumped cache version would
   make one forgotten bump pin every user to stale JS permanently. Instead
@@ -196,9 +196,10 @@ Two decisions worth keeping straight:
 recovery route (see [docs/DEPLOYMENT.md](DEPLOYMENT.md)). It deliberately
 never touches IndexedDB, which holds the only copy of the data.
 
-The whole zxing barcode graph currently loads at boot, because
-`products_screen.js` imports `scanner.js` statically. Making that a dynamic
-import would cut boot cost considerably; not done yet.
+zxing is loaded with a dynamic `import()` on the first scan (`loadZxing()` in
+`js/scanner.js`), not at boot, so start-up never waits on the barcode
+library. Consequence: the CDN cache is filled by the first *scan* made
+online, not the first app load.
 
 ## Implemented Features
 - Stores: create, edit, archive/restore, type-ahead on name.

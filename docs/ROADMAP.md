@@ -225,5 +225,4 @@ rejections — cross-household sharing, multi-household membership, password
 reset, invite-code variants — are moot now that there are no households.)
 
 ## Known follow-ups / tech debt
-- Make the zxing import dynamic (inside `scanBarcode()`), so the barcode
-  library stops loading on every boot. It is the only heavy dependency left.
+- None open.

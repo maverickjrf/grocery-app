@@ -1,17 +1,39 @@
-import { BrowserMultiFormatReader } from 'https://esm.sh/@zxing/browser@0.1.5';
-import { DecodeHintType, BarcodeFormat } from 'https://esm.sh/@zxing/library@0.21.3';
 import { modalController } from './nav.js';
 
-// Focus on the barcode types found on groceries (plus QR). Restricting the list
-// makes 1D retail barcodes decode faster and more reliably than trying everything.
-const hints = new Map();
-hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-  BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
-  BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-  BarcodeFormat.CODE_128, BarcodeFormat.CODE_39,
-  BarcodeFormat.ITF, BarcodeFormat.QR_CODE,
-]);
-hints.set(DecodeHintType.TRY_HARDER, true);
+// zxing is by far the heaviest thing the app loads, so it's fetched on the
+// first scan rather than at start-up (a static import made every boot wait
+// for the whole module graph). The service worker caches it cache-first, so
+// after one online scan it loads from the phone, offline too.
+const ZXING_BROWSER = 'https://esm.sh/@zxing/browser@0.1.5';
+const ZXING_LIBRARY = 'https://esm.sh/@zxing/library@0.21.3';
+
+let zxing = null; // promise of { Reader, hints }, shared by every scan
+function loadZxing() {
+  if (!zxing) {
+    zxing = Promise.all([import(ZXING_BROWSER), import(ZXING_LIBRARY)])
+      .then(([browser, library]) => {
+        const { DecodeHintType, BarcodeFormat } = library;
+        // Focus on the barcode types found on groceries (plus QR). Restricting
+        // the list makes 1D retail barcodes decode faster and more reliably
+        // than trying everything.
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128, BarcodeFormat.CODE_39,
+          BarcodeFormat.ITF, BarcodeFormat.QR_CODE,
+        ]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        return { Reader: browser.BrowserMultiFormatReader, hints };
+      })
+      .catch((err) => {
+        zxing = null; // let the next scan try again, e.g. once back online
+        err.scannerLoadFailed = true;
+        throw err;
+      });
+  }
+  return zxing;
+}
 
 export function scanBarcode() {
   return new Promise((resolve) => {
@@ -30,7 +52,6 @@ export function scanBarcode() {
     const status = overlay.querySelector('.scanner-status');
     const cancelBtn = overlay.querySelector('.scanner-cancel');
 
-    const reader = new BrowserMultiFormatReader(hints);
     let controls = null;
     let done = false;
     let resultValue = null;
@@ -53,23 +74,27 @@ export function scanBarcode() {
 
     cancelBtn.onclick = () => finish(null);
 
-    reader.decodeFromConstraints(
-      {
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+    loadZxing().then(({ Reader, hints }) => {
+      if (done) return null; // cancelled while the library was loading
+      return new Reader(hints).decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
         },
-      },
-      video,
-      (result, _err, ctrl) => {
-        controls = ctrl || controls;
-        if (result) {
-          console.log('Barcode detected:', result.getText());
-          finish(result.getText());
+        video,
+        (result, _err, ctrl) => {
+          controls = ctrl || controls;
+          if (result) {
+            console.log('Barcode detected:', result.getText());
+            finish(result.getText());
+          }
         }
-      }
-    ).then((c) => {
+      );
+    }).then((c) => {
+      if (!c) return;
       controls = c;
       console.log('Scanner started — point at a barcode.');
       if (done) { try { c.stop(); } catch { /* cancelled at startup */ } }
@@ -77,6 +102,7 @@ export function scanBarcode() {
       console.error('Scanner failed to start:', err);
       const name = err && err.name;
       status.textContent =
+        err && err.scannerLoadFailed ? 'The scanner needs internet the first time. Type the barcode instead.' :
         name === 'NotAllowedError' ? 'Camera permission was denied. Type the barcode instead.' :
         name === 'NotFoundError'  ? 'No camera found. Type the barcode instead.' :
                                     'Could not start the camera. Type the barcode instead.';

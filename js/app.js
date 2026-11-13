@@ -8,6 +8,7 @@ import { session } from './session.js';
 import { startShoppingScan } from './shopping.js';
 import { registerServiceWorker } from './sw_register.js';
 import { requestPersistentStorage } from './local_db.js';
+import { reminderRepository } from './reminders.js';
 
 // How long without a backup before Home starts mentioning it. The data lives
 // on one phone; this is the only thing standing between a lost phone and
@@ -33,6 +34,7 @@ function showHome() {
       <button id="stores" class="btn-secondary">Manage stores</button>
       <button id="data" class="btn-secondary">Backup &amp; restore</button>
       <p id="backup-nudge" class="hint backup-nudge" hidden></p>
+      <div id="reminders"></div>
     </div></div>`);
 
   document.getElementById('products').onclick = () => showProductsScreen(showHome);
@@ -59,6 +61,26 @@ function showHome() {
   })();
 
   showBackupNudge();
+  showReminders();
+}
+
+async function showReminders() {
+  try {
+    const active = await reminderRepository.active();
+    const box = document.getElementById('reminders');
+    if (!box || !active.length) return; // navigated away, or nothing to show
+    box.innerHTML = active.map((r) => `
+      <div class="reminder" data-id="${escape(r.id)}">
+        <p class="reminder-text">${escape(r.text)}</p>
+        <button type="button" class="btn-text reminder-done">Done</button>
+      </div>`).join('');
+    box.querySelectorAll('.reminder').forEach((el) => {
+      el.querySelector('.reminder-done').onclick = async () => {
+        try { await reminderRepository.dismiss(el.dataset.id); } catch { /* shows again next time */ }
+        el.remove();
+      };
+    });
+  } catch { /* a reminder must never break Home */ }
 }
 
 async function showBackupNudge() {

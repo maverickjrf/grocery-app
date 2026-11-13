@@ -22,14 +22,25 @@ it worked technically, but needing to allow notifications for the browser
 itself, and ideally to install the app, was too much friction. Not planned
 for this app. The removal is deployed.
 
+**Deployed, untested — the human checks on the phone (2026-11-13):**
+- zxing loads on the first scan instead of at boot (`loadZxing()` in
+  `js/scanner.js`).
+- Home reminders: `js/reminders.js` holds a hard-coded list, shown on Home
+  until "Done"; dismissals live in the `meta` store (`dismissedReminders`).
+  One reminder so far: the GTIN-14 check below.
+
 ## Waiting on
 
-Unconfirmed: the GTIN-14 matching (`f33a33d`) — scan the Phoenix garbage bag
-and the Knorr pork cubes; each should open its found panel.
+**The human checks the two changes above on the phone**: Home shows the
+reminder card, Done hides it; the first scan opens the camera (after a short
+load), later scans open at once.
 
-The human should make a phone backup and put it in Drive; until then
-`grocery-export.json` is the only off-phone copy. Supabase is left to
-auto-pause.
+Unconfirmed: the GTIN-14 matching (`f33a33d`) — scan the Phoenix garbage bag
+and the Knorr pork cubes; each should open its found panel. The Home reminder
+covers this; remove its entry from `REMINDERS` once confirmed.
+
+Backups: the human keeps regular backups in the phone's storage (their
+choice; Drive not wanted for now). Supabase is left to auto-pause.
 
 ## Next
 
@@ -38,7 +49,6 @@ auto-pause.
   items (a normal backup includes all of it).
 - Spec 5 (sales/promos) — present the plan for approval first. Add its new
   columns to `COLUMNS` in `js/backup.js`.
-- Small follow-up: dynamic `import()` of zxing inside `scanBarcode()`.
 
 ## Working agreements
 

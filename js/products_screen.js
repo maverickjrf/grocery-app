@@ -1,8 +1,9 @@
 import { render, escape, icons, showBusy } from './ui.js';
 import { productRepository } from './products.js';
 import { scanBarcode } from './scanner.js';
-import { showProductDetail } from './product_detail.js';
+import { showProductDetail, openPriceForm } from './product_detail.js';
 import { openProductForm } from './product_form.js';
+import { session } from './session.js';
 import { confirmDialog } from './dialog.js';
 import { formatPackage } from './units.js';
 import { pushScreen, goBack } from './nav.js';
@@ -43,7 +44,7 @@ async function paintProductsScreen(onExit, includeArchived, initialQuery) {
     </div>`);
   const reload = () => paintProductsScreen(onExit, includeArchived, searchEl.value);
   document.getElementById('back').onclick = () => goBack();
-  document.getElementById('add').onclick = () => openProductForm({ onSaved: reload });
+  document.getElementById('add').onclick = () => openProductForm({ onSaved: afterCreate(reload) });
   document.getElementById('scan').onclick = () => scanAndRoute(reload);
 
   const listEl = document.getElementById('product-list');
@@ -162,5 +163,16 @@ async function scanAndRoute(reload) {
   catch (err) { alert(err.message || 'Barcode lookup failed.'); return; }
   finally { done(); }
   if (existing) openProductForm({ product: existing, onSaved: reload });
-  else openProductForm({ prefill: { barcode: code, scannedNew: true }, onSaved: reload });
+  else openProductForm({ prefill: { barcode: code, scannedNew: true }, onSaved: afterCreate(reload) });
+}
+
+// A new product is almost always added because you're looking at its price,
+// so go straight to recording one. Cancelling the price form just leaves the
+// product saved, which keeps adding several products in a row quick. Edits
+// don't get this — reshaping a product is not a reason to record a price.
+function afterCreate(reload) {
+  return (saved) => {
+    reload();
+    if (saved) openPriceForm(saved, { defaultStoreId: session.getCurrentStoreId(), onSaved: reload });
+  };
 }

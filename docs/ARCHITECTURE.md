@@ -19,7 +19,9 @@ is no server, no account and no sign-in.
 - **Barcode scanning:** `@zxing/browser@0.1.5` + `@zxing/library@0.21.3`,
   loaded as ESM from esm.sh — the only external dependency.
 - **Offline:** total. `sw.js` caches the app shell; the data was never online.
-- **Target device:** Android, Chrome, installed as a PWA (see "Local-first").
+- **Target device:** Android (Samsung), **Samsung Internet** — the real data
+  lives in that browser's storage; Chrome on the same phone would see an
+  empty database (see "Local-first").
 - **Cost:** Zero. GitHub Pages free.
 
 ## Architectural Decisions (and the why)

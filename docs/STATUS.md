@@ -17,21 +17,12 @@ The scan → add product → record price flow is fixed and verified on the phon
 Creating a product in Manage products now opens the price form right after
 (`ac5fb2c`, tested on desktop).
 
-**Deployed, being tested on the phone: Web Push experiment (2026-11-13).** Purpose: find
-out whether a PWA can receive server-sent push on Android, to decide on it
-for a separate work project, with no real use case in this app yet. Files: `js/push.js`,
-push/notificationclick handlers in `sw.js`, a "Push notifications (test)"
-section on Backup & restore, `manifest.json` + `icons/` (the app had no
-manifest), `.gitignore` entries. The sender is a Node script **outside the
-repo** (Claude's session scratchpad, `push-sender/send.mjs` + `vapid.json`
-holding the VAPID private key; the public key is in `js/push.js`). If the
-scratchpad is lost, run `node send.mjs keys` to make a new pair, put the new
-public key in `js/push.js`, and re-subscribe.
+A Web Push experiment (`8ddb07f`) was tried and removed again (2026-11-13):
+it worked technically, but needing to allow notifications for the browser
+itself, and ideally to install the app, was too much friction. Not planned
+for this app. The removal is deployed.
 
 ## Waiting on
-
-**The human tests the push experiment** on desktop localhost, then on the
-phone after a deploy (checklist was given in chat).
 
 Unconfirmed: the GTIN-14 matching (`f33a33d`) — scan the Phoenix garbage bag
 and the Knorr pork cubes; each should open its found panel.
